@@ -200,13 +200,13 @@ fi
 # Print sensor parameters
 if [[ $CONFIG_flag_print_temp -eq 1 ]]
 then
-	echo_text -hb -$CONST_level_verbose_none "System temperature =  $(echo ${SOC_temp} | awk '{print($1/1e3)}')'C"
+	echo_text -hb -$CONST_level_verbose_none "System temperature =  $(echo ${SOC_temp} | awk '{printf("%.3f", $1 / 1000)}')'C"
 fi
 
 # Write to status log
 if [ -n "$CONFIG_status" ]
 then
-	msg="Temperature $(echo ${SOC_temp} | awk '{print($1/1e3)}')'C to RRD."
+	msg="Temperature $(echo ${SOC_temp} | awk '{printf("%.3f", $1 / 1000)}')'C to RRD."
 	echo_text -s -$CONST_level_verbose_info "Writing to status file '$CONFIG_status' ... $msg"
 	echo_text -ISL -$CONST_level_verbose_none "$msg" > "$CONFIG_status"
 fi
