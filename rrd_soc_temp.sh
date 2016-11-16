@@ -88,6 +88,10 @@ $(process_help -f)
 read_soc () {
 	local temp
 	temp=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
+	if [[ ${temp} -lt 100 ]]
+	then
+		temp=$(echo ${temp} | awk '{printf("%d", $1 * 1000)}')
+	fi
 	printf "$temp"
 }
 
