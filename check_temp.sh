@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # NAME:
-#   check_temp.sh - Check the Broadcom SoC temperature
+#   check_temp.sh - Check the SoC temperature
 #
 # SYNOPSIS:
 #   check_temp.sh [OPTION [ARG]]
@@ -27,6 +27,9 @@
 #   /sys/class/thermal/thermal_zone0/trip_point_0_temp.
 # - The warning temperature limit is the 80% (configurable) of that maximal temperature.
 # - The current temperature is read from /sys/class/thermal/thermal_zone0/temp.
+# - Script outputs (emails in the cron) warning message only than the currently warned temperature
+#   is greater than previously warned one or if the temperature meantime sinks under the warning temperature.
+#   It suppresses annoying repeatable warning emails during a continuous warning temperature time period. 
 #
 # OPTIONS & ARGS:
 #   -h
@@ -93,15 +96,18 @@ then
 fi
 
 # -> BEGIN _config
-CONFIG_copyright="(c) 2014-2016 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.6.1"
+CONFIG_copyright="(c) 2014-2017 Libor Gabaj <libor.gabaj@gmail.com>"
+CONFIG_version="0.7.0"
 #
-CONFIG_warning_perc=80                   # Percentage of maximal limit for warning - should be integer
-CONFIG_shutdown_perc=95                  # Percentage of maximal limit for shutting down - should be integer
-CONFIG_flag_print_sensors=0              # List sensor parameters flag
-CONFIG_flag_force_warning=0              # Force warning temperature flag
-CONFIG_flag_force_shutdown=0             # Force shutdown temperature flag
-CONFIG_flag_force_maximum=0              # Force maximal temperature flag
+CONFIG_warning_perc=80                    # Percentage of maximal limit for warning - should be integer
+CONFIG_shutdown_perc=95                   # Percentage of maximal limit for shutting down - should be integer
+CONFIG_flag_print_sensors=0               # List sensor parameters flag
+CONFIG_flag_force_warning=0               # Force warning temperature flag
+CONFIG_flag_force_shutdown=0              # Force shutdown temperature flag
+CONFIG_flag_force_maximum=0               # Force maximal temperature flag
+CONFIG_log_file="$0.err"                  # Error log file
+#
+LOG_temp_warning=0                        # Recent logged warning temperature in millicentigrades
 # <- END _config
 
 # <- BEGIN _sensors
@@ -136,7 +142,8 @@ SENSOR_temp_shutdown_text=$(echo "Shutdown temperature" $(echo ${SENSOR_temp_shu
 # @args:	(none)
 # @return:	(none)
 # @deps:	(none)
-show_help () {
+show_help ()
+{
 	echo
 	echo "${CONFIG_script} [OPTION [ARG]]"
 	echo "
@@ -152,6 +159,27 @@ $(process_help -o)
   -3			Force fatal: Simulate exceeding shutdown temperature.
 $(process_help -f)
 "
+}
+
+# @info:  Save log variables to log file
+# @args:  (none)
+# @return:  (none)
+# @deps:  LOG_* variables
+save_logvars ()
+{
+  set | grep "^LOG_" > "${CONFIG_log_file}"
+}
+
+# @info:  Remove log variables by deleting log file
+# @args:  (none)
+# @return:  (none)
+# @deps:  LOG_* variables
+del_logvars ()
+{
+  if [[ -f "${CONFIG_log_file}" ]]
+  then
+    rm "${CONFIG_log_file}"
+  fi
 }
 # <- END _functions
 
@@ -216,12 +244,31 @@ then
 	echo_text -ISL -$CONST_level_verbose_none "$message." > "$CONFIG_status"
 fi
 
+# Remove log variables at correct temperature
+if [[ $SENSOR_temp_current -le $SENSOR_temp_warning && $CONFIG_flag_force_warning -eq 0 ]]
+then
+  del_logvars
+fi
+
 # Warn if the temperature is between the warning and maximal limit
 if [[ $SENSOR_temp_current -gt $SENSOR_temp_warning && $SENSOR_temp_current -lt $SENSOR_temp_shutdown || $CONFIG_flag_force_warning -eq 1 ]]
 then
 	message="${SENSOR_temp_current_text} is greater than ${SENSOR_temp_warning_text}"
-	echo_text -e -$CONST_level_verbose_error "$message."
 	log_text -WS -$CONST_level_logging_error "$message"
+  # Read previous logged current temperature
+  if [ -s "${CONFIG_log_file}" ]
+  then
+    source "${CONFIG_log_file}"
+  fi
+  # Compare logged value to the current one
+  if [[ $SENSOR_temp_current -gt $LOG_temp_warning ]]
+  then
+    # Notify (in cron email) just the greater current temperature than previous one or at the first time
+    echo_text -e -$CONST_level_verbose_error "$message."
+    del_logvars
+    LOG_temp_warning=$SENSOR_temp_current
+    save_logvars
+  fi
 fi
 
 # Report if current temperature is exactly equal to the maximal temperature

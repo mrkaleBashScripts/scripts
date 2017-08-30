@@ -38,6 +38,9 @@ if temperature limits are exceeded.
 - The warning temperature limit is the 80% (configurable) of that maximal temperature.
 - The current temperature is read from `/sys/class/thermal/thermal_zone0/temp`.
 - At verbose and log level `info` the script outputs and logs the current temperature.
+- Script outputs (emails in the cron) warning message only than the currently warned temperature
+  is greater than previously warned one or if the temperature meantime sinks under the warning temperature.
+  It suppresses annoying repeatable warning emails during a continuous warning temperature time period. 
 
 Options and arguments
 =====
@@ -76,13 +79,13 @@ of configuration parameters is as follows where the latest is valid:
 
 #### CONFIG\_warning_perc
 This parameter defines the warning temperature limit as a percentage rate of the maximal
-temperature limit, which is usually 85캜. Default value is 80%, i.e., **68캜**.
+temperature limit, which is usually 85째C. Default value is 80%, i.e., **68째C**.
 If the temperature exceeds this warning limit, the script outputs alert
 to the standard output, which is usually emailed by the cron, as well as to the system log.
 
 #### CONFIG\_shutdown_perc
 This parameter defines the halting temperature limit as a percentage rate of the maximal
-temperature limit, which is usually 85캜. Default value is 95%, i.e., **80.75캜**.
+temperature limit, which is usually 85째C. Default value is 95%, i.e., **80.75째C**.
 If the temperature exceeds this halting limit, the script outputs alert
 to the standard output, which is usually emailed by the cron, as well as to the system log,
 and finally shuts down the system in order to prevent the overheating destruction.
