@@ -8,59 +8,62 @@
 #
 # DESCRIPTION:
 # Script checks the internal temperature of the CPU, turns on or off connected fan,
-# and warns or shuts down the system if temperature limits are exceeded.
+# publishes to a MQTT topic, and warns or shuts down the system if temperature limits
+# are exceeded.
 # - Script has to be run under root privileges (sudo ...).
 # - Script is supposed to run under cron.
-# - Script does not logs to the system log but to custom log in "/var/log".
+# - Script does not logs to the system log but to custom user.log in "/var/log"
+#   if syslog is available.
 # - Script may write its working status into a status (tick) file if defined, what may
 #   be considered as a monitoring heartbeat of the script especially then in normal conditions
 #   it produces no output.
-# - Status file should be located in the temporary file system (e.g., in the folder /run)
-#   in order to reduce writes to the SD card.
+# - Status file should be located in the temporary file system (e.g., in the folder /tmp)
+#   preferably in RAM in order to reduce writes to the SD card.
 # - All essential parameters are defined in the section of configuration parameters.
 #   Their description is provided locally. Script can be configured by changing values of them.
 # - Configuration parameters in the script can be overriden by the corresponding ones
 #   in a configuration file declared in the command line.
-# - In simulation mode the script ommits shutting down the system.
-# - The halting (shutdown) temperature limit is the 95% (configurable)
+# - In simulation mode the script ommits shutting down the system and switching a fan.
+# - The halting (shutdown) temperature limit is the configurable percentage
 #   of maximal temperature written in
 #   /sys/class/thermal/thermal_zone0/trip_point_0_temp.
-# - The warning temperature limit is the 80% (configurable) of that maximal temperature.
 # - The current temperature is read from /sys/class/thermal/thermal_zone0/temp.
 # - Script outputs (emails in the cron) warning message only than the currently warned temperature
 #   is greater than previously warned one or if the temperature meantime sinks under the warning temperature.
-#   It suppresses annoying repeatable warning emails during a continuous warning temperature time period. 
+#   It suppresses annoying repeatable warning emails during a continuous warning temperature time period.
+# - Script outputs (emails in the cron) turning on or off a fan.
+# - Script publishes temperatures and controlling a fan to particular MQTT topics.
 #
 # OPTIONS & ARGS:
 #   -h
-#       Help. Show usage description and exit.
+#      Help. Show usage description and exit.
 #   -s
-#       Simmulation. Perform dry run just with output messages and log files.
+#      Simmulation. Perform dry run just with output messages and log files.
 #   -V
-#       Version. Show version and copyright information and exit.
+#      Version. Show version and copyright information and exit.
 #   -c
-#       Configs. Print listing of all configuration parameters.
+#      Configs. Print listing of all configuration parameters.
 #   -l LoggingLevel
-#       Logging. Level of logging intensity to syslog
-#       0=none, 1=errors (default), 2=warnings, 3=info, 4=full
+#      Logging. Level of logging intensity to syslog
+#      0=none, 1=errors (default), 2=warnings, 3=info, 4=full
 #   -o VerboseLevel
-#       Output. Level of verbose intensity.
-#       0=none, 1=errors, 2=mails, 3=info (default), 4=functions, 5=full
+#      Output. Level of verbose intensity.
+#      0=none, 1=errors, 2=mails, 3=info (default), 4=functions, 5=full
 #   -m
-#       Mailing. Display processing messages suitable for emailing from cron.
-#       It is an alias for '-o2'.
+#      Mailing. Display processing messages suitable for emailing from cron.
+#      It is an alias for '-o2'.
 #   -v
-#       Verbose. Display all processing messages.
-#       It is an alias for '-o5'.
+#      Verbose. Display all processing messages.
+#      It is an alias for '-o5'.
 #   -f ConfigFile
-#       File. Configuration file for overriding default configuration parameters.
+#      File. Configuration file for overriding default configuration parameters.
 #   -t StatusFile
-#       Tick. File for writing working status of the script.
-#       Should be located in temporary file system.
+#      Tick. File for writing working status of the script.
+#      Should be located in temporary file system.
 #   -S
-#       Sensors. List all sensor parameters.
+#      Sensors. List all sensor parameters.
 #   -P GpioFan
-#       GPIO pin number for WiringPi, WiringOP library for controlling a fan.
+#      GPIO pin number for WiringPi, WiringOP library for controlling a fan.
 #   -1
 #      Force warning. Simulate reaching warning temperature.
 #   -2
@@ -104,13 +107,11 @@ fi
 # -> BEGIN _config
 CONFIG_copyright="(c) 2014-2018 Libor Gabaj <libor.gabaj@gmail.com>"
 CONFIG_version="0.8.0"
-CONFIG_commands=('gpio') # Array of generally needed commands
+CONFIG_commands=('gpio' 'mosquitto_pub') # Array of generally needed commands
 #
-CONFIG_gpio_fan=15                        # Number of GPIO pin for WiringPi library performing switchin a fan
-# CONFIG_fanoff_perc=75                     # Integer percentage of maximal limit for turning off a fan - hysteresis
-CONFIG_fanoff_perc=45                     # Integer percentage of maximal limit for turning off a fan - hysteresis
-# CONFIG_fanon_perc=85                      # Integer percentage of maximal limit for turning on a fan
-CONFIG_fanon_perc=50                      # Integer percentage of maximal limit for turning on a fan
+CONFIG_gpio_fan=15                        # Number of GPIO pin for WiringPi library performing switching a fan
+CONFIG_fanoff_perc=75                     # Integer percentage of maximal limit for turning off a fan - hysteresis
+CONFIG_fanon_perc=85                      # Integer percentage of maximal limit for turning on a fan
 CONFIG_warning_perc=90                    # Integer percentage of maximal limit for warning
 CONFIG_shutdown_perc=95                   # Integer percentage of maximal limit for shutting down
 CONFIG_flag_print_sensors=0               # List sensor parameters flag
@@ -121,47 +122,15 @@ CONFIG_flag_force_fanon=0                 # Force fan on temperature flag
 CONFIG_flag_force_fanoff=0                # Force fan off temperature flag
 CONFIG_log_file="$0.err"                  # Status log file
 #
+# MQTT
+CONFIG_mqtt_topic_base="$(hostname)/server"
+CONFIG_mqtt_topic_temp="${CONFIG_mqtt_topic_base}/temp"  ## Milicentigrades
+CONFIG_mqtt_topic_fan="${CONFIG_mqtt_topic_base}/fan"    ## Fan GPIO value
+CONFIG_mqtt_host=localhost
+CONFIG_mqtt_port=1883
+#
 LOG_temp_warning=0                        # Recent logged warning temperature in millicentigrades
 # <- END _config
-
-# <- BEGIN _sensors
-# Board sensor temperature in milidegrees Celsius
-SENSOR_temp_current=$(cat /sys/class/thermal/thermal_zone0/temp)
-if [[ ${SENSOR_temp_current} -lt 100 ]]
-then
-    SENSOR_temp_current=$(echo ${SENSOR_temp_current} | awk '{printf("%d", $1 * 1000)}')
-fi
-SENSOR_temp_current_text=$(echo "Current temperature" $(echo ${SENSOR_temp_current} | awk '{printf("%.1f", $1 / 1000)}') "'C")
-
-# Temperature technical limit
-SENSOR_temp_maximal=$(cat /sys/class/thermal/thermal_zone0/trip_point_0_temp)
-if [[ ${SENSOR_temp_maximal} -lt 100 ]]
-then
-        SENSOR_temp_maximal=$(echo "${SENSOR_temp_maximal}" | awk '{printf("%d", $1 * 1000)}')
-fi
-SENSOR_temp_maximal_text=$(echo "Maximal temperature" $(echo ${SENSOR_temp_maximal} | awk '{printf("%.1f", $1 / 1000)}') "'C")
-
-# Temperature limit for warning
-SENSOR_temp_warning=$(echo "${SENSOR_temp_maximal} ${CONFIG_warning_perc}" | awk '{printf("%d", $1 * $2 / 100)}')
-SENSOR_temp_warning_text=$(echo "Warning temperature" $(echo ${SENSOR_temp_warning} | awk '{printf("%.1f", $1 / 1000)}') "'C")
-
-# Temperature limit for shutdown
-SENSOR_temp_shutdown=$(echo "${SENSOR_temp_maximal} ${CONFIG_shutdown_perc}" | awk '{printf("%d", $1 * $2 / 100)}')
-SENSOR_temp_shutdown_text=$(echo "Shutdown temperature" $(echo ${SENSOR_temp_shutdown} | awk '{printf("%.1f", $1 / 1000)}') "'C")
-
-# Temperature limit for fan on
-SENSOR_temp_fanon=$(echo "${SENSOR_temp_maximal} ${CONFIG_fanon_perc}" | awk '{printf("%d", $1 * $2 / 100)}')
-SENSOR_temp_fanon_text=$(echo "Fan ON temperature" $(echo ${SENSOR_temp_fanon} | awk '{printf("%.1f", $1 / 1000)}') "'C")
-
-# Temperature limit for fan off
-SENSOR_temp_fanoff=$(echo "${SENSOR_temp_maximal} ${CONFIG_fanoff_perc}" | awk '{printf("%d", $1 * $2 / 100)}')
-SENSOR_temp_fanoff_text=$(echo "Fan OFF temperature" $(echo ${SENSOR_temp_fanoff} | awk '{printf("%.1f", $1 / 1000)}') "'C")
-
-# GPIO values
-GPIO_fan_high=1
-GPIO_fan_low=0
-GPIO_fan_val=$(gpio read ${CONFIG_gpio_fan})  # Recent status of a fan GPIO
-# <- END _sensors
 
 # -> BEGIN _functions
 
@@ -171,35 +140,80 @@ GPIO_fan_val=$(gpio read ${CONFIG_gpio_fan})  # Recent status of a fan GPIO
 # @deps:    (none)
 show_help ()
 {
-    echo
-    echo "${CONFIG_script} [OPTION [ARG]]"
-    echo "
+  echo
+  echo "${CONFIG_script} [OPTION [ARG]]"
+  echo "
 Check temperature of the SoC, turn on or off a fan if needed, and shutdown
 at overheating over the shutdown temperature or warn at warning temperature.
 
-Fan on temperature is the percentage (${CONFIG_fanon_perc}%) of maximal limit.
-If reached or exceeded, a fan is turned on for active cooling.
-
-Fan off temperature is the percentage (${CONFIG_fanon_perc}%) of maximal limit.
+Fan off temperature is the percentage of maximal limit.
 If reached or less, a fan is turned off for just a pasive cooling.
 
-Warning temperature is the percentage (${CONFIG_warning_perc}%) of maximal limit.
+Fan on temperature is the percentage of maximal limit.
+If reached or exceeded, a fan is turned on for active cooling.
+
+Warning temperature is the percentage of maximal limit.
 If reached or exceeded, a warning message is sent. It is repeated just at higher
 temperature then of recent warning.
 
-Shutdown temperature is the percentage (${CONFIG_shutdown_perc}%) of maximal limit.
+Shutdown temperature is the percentage of maximal limit.
 If reached or exceeded, a fatal message is sent and system immediatelly shut down.
 
 $(process_help -o)
-  -S            Sensors: List all sensor parameters.
-  -P GpioFan        GPIO pin number for WiringPi, WiringOP library for controlling a fan.                 
-  -1            Force warning: Simulate reaching warning temperature.
-  -2            Force error: Simulate reading exactly maximal temperature.
-  -3            Force fatal: Simulate exceeding shutdown temperature.
-  -4            Force fan on: Turn on a fan by setting GPIO pin (${CONFIG_gpio_fan}) HIGH.
-  -5            Force fan off: Turn off a fan by setting GPIO pin (${CONFIG_gpio_fan}) LOW.
+  -S Sensors: List all sensor parameters.
+  -P GpioFan
+     GPIO pin number: Control pin in notatioin of WiringPi, WiringOP library notation for a fan.
+  -1 Force warning: Simulate reaching warning temperature.
+  -2 Force error: Simulate reading exactly maximal temperature.
+  -3 Force fatal: Simulate exceeding shutdown temperature.
+  -4 Force fan on: Turn on a fan by setting GPIO pin HIGH.
+  -5 Force fan off: Turn off a fan by setting GPIO pin LOW.
 $(process_help -f)
 "
+}
+
+# @info:  Set sensor parameters
+# @args:  (none)
+# @return:  (none)
+# @deps:  LOG_* variables
+set_sensors ()
+{
+  # Board sensor temperature in milidegrees Celsius
+  SENSOR_temp_current=$(cat /sys/class/thermal/thermal_zone0/temp)
+  if [[ ${SENSOR_temp_current} -lt 100 ]]
+  then
+    SENSOR_temp_current=$(echo ${SENSOR_temp_current} | awk '{printf("%d", $1 * 1000)}')
+  fi
+  SENSOR_temp_current_text=$(echo "Current temperature" $(echo ${SENSOR_temp_current} | awk '{printf("%.1f", $1 / 1000)}') "'C")
+
+  # Temperature technical limit
+  SENSOR_temp_maximal=$(cat /sys/class/thermal/thermal_zone0/trip_point_0_temp)
+  if [[ ${SENSOR_temp_maximal} -lt 100 ]]
+  then
+    SENSOR_temp_maximal=$(echo "${SENSOR_temp_maximal}" | awk '{printf("%d", $1 * 1000)}')
+  fi
+  SENSOR_temp_maximal_text=$(echo "Maximal temperature" $(echo ${SENSOR_temp_maximal} | awk '{printf("%.1f", $1 / 1000)}') "'C")
+
+  # Temperature limit for warning
+  SENSOR_temp_warning=$(echo "${SENSOR_temp_maximal} ${CONFIG_warning_perc}" | awk '{printf("%d", $1 * $2 / 100)}')
+  SENSOR_temp_warning_text=$(echo "Warning temperature" $(echo ${SENSOR_temp_warning} | awk '{printf("%.1f", $1 / 1000)}') "'C")
+
+  # Temperature limit for shutdown
+  SENSOR_temp_shutdown=$(echo "${SENSOR_temp_maximal} ${CONFIG_shutdown_perc}" | awk '{printf("%d", $1 * $2 / 100)}')
+  SENSOR_temp_shutdown_text=$(echo "Shutdown temperature" $(echo ${SENSOR_temp_shutdown} | awk '{printf("%.1f", $1 / 1000)}') "'C")
+
+  # Temperature limit for fan on
+  SENSOR_temp_fanon=$(echo "${SENSOR_temp_maximal} ${CONFIG_fanon_perc}" | awk '{printf("%d", $1 * $2 / 100)}')
+  SENSOR_temp_fanon_text=$(echo "Fan ON temperature" $(echo ${SENSOR_temp_fanon} | awk '{printf("%.1f", $1 / 1000)}') "'C")
+
+  # Temperature limit for fan off
+  SENSOR_temp_fanoff=$(echo "${SENSOR_temp_maximal} ${CONFIG_fanoff_perc}" | awk '{printf("%d", $1 * $2 / 100)}')
+  SENSOR_temp_fanoff_text=$(echo "Fan OFF temperature" $(echo ${SENSOR_temp_fanoff} | awk '{printf("%.1f", $1 / 1000)}') "'C")
+
+  # GPIO values
+  GPIO_fan_high=1
+  GPIO_fan_low=0
+  GPIO_fan_val=$(gpio read ${CONFIG_gpio_fan})  # Recent status of a fan GPIO
 }
 
 # @info:  Save log variables to log file
@@ -238,52 +252,75 @@ then
   GPIO_fan_status="ON"
 fi
 }
+
+# @info:  Publish temperature
+# @args:  (none)
+# @return:  (none)
+# @deps:  mosquitto_pub
+mqtt_temperature ()
+{
+  mosquitto_pub -h "${CONFIG_mqtt_host}" -p ${CONFIG_mqtt_port} -t "${CONFIG_mqtt_topic_temp}" -m "${SENSOR_temp_current}"
+  local message="Temperature '${SENSOR_temp_current}' has been published to topic '${CONFIG_mqtt_topic_temp}'"
+  status_text -a "$message"
+}
+
+# @info:  Publish fan status
+# @args:  (none)
+# @return:  (none)
+# @deps:  mosquitto_pub
+mqtt_fan ()
+{
+  mosquitto_pub -h "${CONFIG_mqtt_host}" -p ${CONFIG_mqtt_port} -t "${CONFIG_mqtt_topic_fan}" -m "${GPIO_fan_val}"
+  local message="Fan status '${GPIO_fan_val}' has been published to topic '${CONFIG_mqtt_topic_fan}'"
+  status_text -a "$message"
+}
 # <- END _functions
 
 # Process command line parameters
 process_options $@
 while getopts "${LIB_options}SP:12345" opt
 do
-    case "$opt" in
-    S)
-        CONFIG_flag_print_sensors=1
-        ;;
-    P)
-        CONFIG_gpio_fan=$OPTARG
-        ;;
-    1)
-        CONFIG_flag_force_warning=1
-        ;;
-    2)
-        CONFIG_flag_force_maximum=1
-        ;;
-    3)
-        CONFIG_flag_force_shutdown=1
-        ;;
-    4)
-        CONFIG_flag_force_fanon=1
-        ;;
-    5)
-        CONFIG_flag_force_fanoff=1
-        ;;
-    \?)
-        msg="Unknown option '-$OPTARG'."
-        fatal_error "$msg $help"
-        ;;
-    :)
-        case "$OPTARG" in
-        *)
-            msg="Missing argument for option '-$OPTARG'."
-            ;;
-        esac
-        fatal_error "$msg $help"
+  case "$opt" in
+  S)
+    CONFIG_flag_print_sensors=1
+    ;;
+  P)
+    CONFIG_gpio_fan=$OPTARG
+    ;;
+  1)
+    CONFIG_flag_force_warning=1
+    ;;
+  2)
+    CONFIG_flag_force_maximum=1
+    ;;
+  3)
+    CONFIG_flag_force_shutdown=1
+    ;;
+  4)
+    CONFIG_flag_force_fanon=1
+    ;;
+  5)
+    CONFIG_flag_force_fanoff=1
+    ;;
+  \?)
+    msg="Unknown option '-$OPTARG'."
+    fatal_error "$msg $help"
+    ;;
+  :)
+    case "$OPTARG" in
+    *)
+      msg="Missing argument for option '-$OPTARG'."
+      ;;
     esac
+    fatal_error "$msg $help"
+  esac
 done
 
 # Process non-option arguments
 shift $(($OPTIND-1))
 
 init_script
+set_sensors
 process_folder -t "Status" -f "${CONFIG_status}"
 show_configs
 gpio_status
@@ -291,28 +328,26 @@ gpio_status
 # Print sensor parameters
 if [ $CONFIG_flag_print_sensors -eq 1 ]
 then
-    echo_text -hb -$CONST_level_verbose_none "List of sensor parameters:"
-    echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_current_text}"
-    echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_maximal_text}"
-    echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_shutdown_text}"
-    echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_warning_text}"
-    echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_fanon_text}"
-    echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_fanoff_text}"
-    echo_text -sa -$CONST_level_verbose_none "Fan GPIO ${CONFIG_gpio_fan} ${GPIO_fan_status}"
+  echo_text -hb -$CONST_level_verbose_none "List of sensor parameters:"
+  echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_current_text}"
+  echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_maximal_text}"
+  echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_shutdown_text}"
+  echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_warning_text}"
+  echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_fanon_text}"
+  echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_fanoff_text}"
+  echo_text -sa -$CONST_level_verbose_none "Fan GPIO ${CONFIG_gpio_fan} ${GPIO_fan_status}"
 fi
 
 # -> Script execution
 trap stop_script EXIT
 
-# Log current temperature and fan status to syslog and status file
+# Output current temperature and fan status
 message="${SENSOR_temp_current_text} and fan turned $GPIO_fan_status"
 echo_text -h -$CONST_level_verbose_info "$message."
 log_text -IS -$CONST_level_logging_info "$message"
-if [ -n "$CONFIG_status" ]
-then
-    echo_text -f -$CONST_level_verbose_info "Writing to status file '$CONFIG_status'."
-    echo_text -ISL -$CONST_level_verbose_none "$message." > "$CONFIG_status"
-fi
+status_text "$message"
+mqtt_temperature
+mqtt_fan
 
 # Remove log variables at correct temperature
 if [[ $SENSOR_temp_current -le $SENSOR_temp_warning && $CONFIG_flag_force_warning -eq 0 ]]
@@ -329,17 +364,16 @@ then
     GPIO_fan_val=$GPIO_fan_high
     gpio_status
     message="Fan has been turned ${GPIO_fan_status}"
-    echo_text -h -$CONST_level_verbose_error "$message."
-    log_text -IS -$CONST_level_logging_error "$message"
-    # Adding action to the status file
-    if [ -n "$CONFIG_status" ]
-    then
-        echo_text -f -$CONST_level_verbose_info "Writing to status file '$CONFIG_status'."
-        echo_text -ISL -$CONST_level_verbose_none "$message." >> "$CONFIG_status"
-    fi
+    echo_text -h -$CONST_level_verbose_info "$message."
+    log_text -IS -$CONST_level_verbose_info "$message"
+    status_text -a "$message"
     # Fan GPIO HIGH
-    gpio mode ${CONFIG_gpio_fan} out
-    gpio write ${CONFIG_gpio_fan} ${GPIO_fan_val}
+    mqtt_fan
+    if [[ $CONFIG_flag_dryrun -eq 0 ]]
+    then
+      gpio mode ${CONFIG_gpio_fan} out
+      gpio write ${CONFIG_gpio_fan} ${GPIO_fan_val}
+    fi
   fi
 fi
 
@@ -352,17 +386,16 @@ then
     GPIO_fan_val=$GPIO_fan_low
     gpio_status
     message="Fan has been turned ${GPIO_fan_status}"
-    echo_text -h -$CONST_level_verbose_error "$message."
-    log_text -IS -$CONST_level_logging_error "$message"
-    # Adding action to the status file
-    if [ -n "$CONFIG_status" ]
+    echo_text -h -$CONST_level_verbose_info "$message."
+    log_text -IS -$CONST_level_verbose_info "$message"
+    status_text -a "$message"
+     # Fan GPIO LOW
+    mqtt_fan
+    if [[ $CONFIG_flag_dryrun -eq 0 ]]
     then
-        echo_text -f -$CONST_level_verbose_info "Writing to status file '$CONFIG_status'."
-        echo_text -ISL -$CONST_level_verbose_none "$message." >> "$CONFIG_status"
+      gpio mode ${CONFIG_gpio_fan} out
+      gpio write ${CONFIG_gpio_fan} ${GPIO_fan_val}
     fi
-    # Fan GPIO LOW
-    gpio mode ${CONFIG_gpio_fan} out
-    gpio write ${CONFIG_gpio_fan} ${GPIO_fan_val}
   fi
 fi
 
