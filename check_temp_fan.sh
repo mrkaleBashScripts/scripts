@@ -8,7 +8,7 @@
 #
 # DESCRIPTION:
 # Script checks the internal temperature of the CPU, turns on or off connected fan,
-# publishes to a MQTT topic, and warns or shuts down the system if temperature limits
+# publishes to MQTT topics, and warns or shuts down the system if temperature limits
 # are exceeded.
 # - Script has to be run under root privileges (sudo ...).
 # - Script is supposed to run under cron.
@@ -32,7 +32,7 @@
 #   is greater than previously warned one or if the temperature meantime sinks under the warning temperature.
 #   It suppresses annoying repeatable warning emails during a continuous warning temperature time period.
 # - Script outputs (emails in the cron) turning on or off a fan.
-# - Script publishes temperatures and controlling a fan to particular MQTT topics.
+# - Script publishes temperatures and controlling a fan to corresponding MQTT topics.
 #
 # OPTIONS & ARGS:
 #   -h
@@ -61,7 +61,7 @@
 #      Tick. File for writing working status of the script.
 #      Should be located in temporary file system.
 #   -S
-#      Sensors. List all sensor parameters.
+#      Sensors. List all sensor and fan parameters.
 #   -P GpioFan
 #      GPIO pin number for WiringPi, WiringOP library for controlling a fan.
 #   -1
@@ -114,6 +114,7 @@ CONFIG_fanoff_perc=75                     # Integer percentage of maximal limit 
 CONFIG_fanon_perc=85                      # Integer percentage of maximal limit for turning on a fan
 CONFIG_warning_perc=90                    # Integer percentage of maximal limit for warning
 CONFIG_shutdown_perc=95                   # Integer percentage of maximal limit for shutting down
+CONFIG_flag_root=1                        # Check root privileges flag
 CONFIG_flag_print_sensors=0               # List sensor parameters flag
 CONFIG_flag_force_warning=0               # Force warning temperature flag
 CONFIG_flag_force_shutdown=0              # Force shutdown temperature flag
@@ -243,14 +244,37 @@ del_logvars ()
 # @deps:  GPIO_*, LOG_* variables
 gpio_status ()
 {
-if [[ $GPIO_fan_val -eq $GPIO_fan_low ]]
-then
-  GPIO_fan_status="OFF"
-fi
-if [[ $GPIO_fan_val -eq $GPIO_fan_high ]]
-then
-  GPIO_fan_status="ON"
-fi
+  if [[ $GPIO_fan_val -eq $GPIO_fan_low ]]
+  then
+    GPIO_fan_status="OFF"
+  fi
+  if [[ $GPIO_fan_val -eq $GPIO_fan_high ]]
+  then
+    GPIO_fan_status="ON"
+  fi
+}
+
+# @info:  Set variable for GPIO fan status
+# @args:  required new value
+# @return:  (none)
+# @deps:  GPIO_* variables
+gpio_write ()
+{
+  if [[ $GPIO_fan_val -ne $1 || $CONFIG_flag_dryrun -eq 1 ]]
+  then
+    GPIO_fan_val=$1
+    gpio_status
+    message="Fan has been turned ${GPIO_fan_status}$(dryrun_token)"
+    echo_text -h -$CONST_level_verbose_info "$message."
+    log_text -IS -$CONST_level_verbose_info "$message"
+    status_text -a "$message"
+    mqtt_fan
+    if [[ $CONFIG_flag_dryrun -eq 0 ]]
+    then
+      gpio mode ${CONFIG_gpio_fan} out
+      gpio write ${CONFIG_gpio_fan} ${GPIO_fan_val}
+    fi
+  fi
 }
 
 # @info:  Publish temperature
@@ -271,7 +295,7 @@ mqtt_temperature ()
 mqtt_fan ()
 {
   mosquitto_pub -h "${CONFIG_mqtt_host}" -p ${CONFIG_mqtt_port} -t "${CONFIG_mqtt_topic_fan}" -m "${GPIO_fan_val}"
-  local message="Fan status '${GPIO_fan_val}' has been published to topic '${CONFIG_mqtt_topic_fan}'"
+  local message="Fan status '${GPIO_fan_val}' has been published to topic '${CONFIG_mqtt_topic_fan}'$(dryrun_token)"
   status_text -a "$message"
 }
 # <- END _functions
@@ -358,45 +382,13 @@ fi
 # Turn on a fan
 if [[ $SENSOR_temp_current -ge $SENSOR_temp_fanon && $SENSOR_temp_current -ne $SENSOR_temp_maximal || $CONFIG_flag_force_fanon -eq 1 ]]
 then
-  # Check if the fan is turned on already
-  if [[ $GPIO_fan_val -ne $GPIO_fan_high ]]
-  then
-    GPIO_fan_val=$GPIO_fan_high
-    gpio_status
-    message="Fan has been turned ${GPIO_fan_status}"
-    echo_text -h -$CONST_level_verbose_info "$message."
-    log_text -IS -$CONST_level_verbose_info "$message"
-    status_text -a "$message"
-    # Fan GPIO HIGH
-    mqtt_fan
-    if [[ $CONFIG_flag_dryrun -eq 0 ]]
-    then
-      gpio mode ${CONFIG_gpio_fan} out
-      gpio write ${CONFIG_gpio_fan} ${GPIO_fan_val}
-    fi
-  fi
+  gpio_write $GPIO_fan_high
 fi
 
 # Turn off a fan
 if [[ $SENSOR_temp_current -le $SENSOR_temp_fanoff && $SENSOR_temp_current -ne $SENSOR_temp_maximal && $CONFIG_flag_force_fanon -eq 0 || $CONFIG_flag_force_fanoff -eq 1 ]]
 then
-  # Check if the fan is turned off already
-  if [[ $GPIO_fan_val -ne $GPIO_fan_low ]]
-  then
-    GPIO_fan_val=$GPIO_fan_low
-    gpio_status
-    message="Fan has been turned ${GPIO_fan_status}"
-    echo_text -h -$CONST_level_verbose_info "$message."
-    log_text -IS -$CONST_level_verbose_info "$message"
-    status_text -a "$message"
-     # Fan GPIO LOW
-    mqtt_fan
-    if [[ $CONFIG_flag_dryrun -eq 0 ]]
-    then
-      gpio mode ${CONFIG_gpio_fan} out
-      gpio write ${CONFIG_gpio_fan} ${GPIO_fan_val}
-    fi
-  fi
+  gpio_write $GPIO_fan_low
 fi
 
 # Warn if the temperature is between the warning and maximal limit
