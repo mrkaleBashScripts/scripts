@@ -106,7 +106,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2014-2018 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.8.0"
+CONFIG_version="0.9.0"
 CONFIG_commands=('gpio' 'mosquitto_pub') # Array of generally needed commands
 #
 CONFIG_gpio_fan=15                        # Number of GPIO pin for WiringPi library performing switching a fan
@@ -129,6 +129,8 @@ CONFIG_mqtt_topic_temp="${CONFIG_mqtt_topic_base}/temp"  ## Milicentigrades
 CONFIG_mqtt_topic_fan="${CONFIG_mqtt_topic_base}/fan"    ## Fan GPIO value
 CONFIG_mqtt_host=localhost
 CONFIG_mqtt_port=1883
+CONFIG_mqtt_user=""	# MQTT broker username and paswords should be present only in config file
+CONFIG_mqtt_pswd=''
 #
 LOG_temp_warning=0                        # Recent logged warning temperature in millicentigrades
 # <- END _config
@@ -283,7 +285,7 @@ gpio_write ()
 # @deps:  mosquitto_pub
 mqtt_temperature ()
 {
-  mosquitto_pub -h "${CONFIG_mqtt_host}" -p ${CONFIG_mqtt_port} -t "${CONFIG_mqtt_topic_temp}" -m "${SENSOR_temp_current}"
+  mosquitto_pub -h "${CONFIG_mqtt_host}" -p ${CONFIG_mqtt_port} -t "${CONFIG_mqtt_topic_temp}" -m "${SENSOR_temp_current}" -u "${CONFIG_mqtt_user}" -P "${CONFIG_mqtt_pswd}"
   local message="Temperature '${SENSOR_temp_current}' has been published to topic '${CONFIG_mqtt_topic_temp}'"
   status_text -a "$message"
 }
@@ -294,7 +296,7 @@ mqtt_temperature ()
 # @deps:  mosquitto_pub
 mqtt_fan ()
 {
-  mosquitto_pub -h "${CONFIG_mqtt_host}" -p ${CONFIG_mqtt_port} -t "${CONFIG_mqtt_topic_fan}" -m "${GPIO_fan_val}"
+  mosquitto_pub -h "${CONFIG_mqtt_host}" -p ${CONFIG_mqtt_port} -t "${CONFIG_mqtt_topic_fan}" -m "${GPIO_fan_val}" -u "${CONFIG_mqtt_user}" -P "${CONFIG_mqtt_pswd}"
   local message="Fan status '${GPIO_fan_val}' has been published to topic '${CONFIG_mqtt_topic_fan}'$(dryrun_token)"
   status_text -a "$message"
 }
@@ -360,18 +362,25 @@ then
   echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_fanon_text}"
   echo_text -s -$CONST_level_verbose_none "${SENSOR_temp_fanoff_text}"
   echo_text -sa -$CONST_level_verbose_none "Fan GPIO ${CONFIG_gpio_fan} ${GPIO_fan_status}"
+  exit
 fi
 
 # -> Script execution
 trap stop_script EXIT
 
-# Output current temperature and fan status
-message="${SENSOR_temp_current_text} and fan turned $GPIO_fan_status"
+# Output current temperature
+message="${SENSOR_temp_current_text}"
 echo_text -h -$CONST_level_verbose_info "$message."
 log_text -IS -$CONST_level_logging_info "$message"
 status_text "$message"
 mqtt_temperature
-mqtt_fan
+
+# Output current fan status
+# message="Fan turned $GPIO_fan_status"
+# echo_text -h -$CONST_level_verbose_info "$message."
+# log_text -IS -$CONST_level_logging_info "$message"
+# status_text "$message"
+# mqtt_fan
 
 # Remove log variables at correct temperature
 if [[ $SENSOR_temp_current -le $SENSOR_temp_warning && $CONFIG_flag_force_warning -eq 0 ]]

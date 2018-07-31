@@ -306,7 +306,7 @@ status_text () {
   then
     shift $(($OPTIND-1))
     echo_text -f -$CONST_level_verbose_function "Writing to status file '$CONFIG_status' ... $1"
-    if [[ $flag_append -eq  0 ]]
+    if [[ $flag_append -eq  0 && -f "${CONFIG_status}" ]]
     then
       rm "$CONFIG_status" >/dev/null
     fi
