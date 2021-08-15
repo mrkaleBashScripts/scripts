@@ -27,9 +27,9 @@ then
 fi
 
 # -> BEGIN Library configs
-LIB_copyright="(c) 2014-2018 Libor Gabaj <libor.gabaj@gmail.com>"
+LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.4.0"
+LIB_version="0.5.0"
 # Process default options
 # LIB_options_exclude=( 't' ) # Put such a line in a main script at the very begining of it
 LIB_options=":hsVcmvo:l:f:t:"
@@ -51,6 +51,7 @@ CONFIG_level_logging=1  # Level of logging to system log - 0=none, 1=error, 2=wa
 CONFIG_level_verbose=1  # Level of verbosity to console - 0=none, 1=error, 2=mail, 3=info, 4=function, 5=full
 CONFIG_flag_print_configs=0 # List configuration parameters flag
 CONFIG_flag_dryrun=0  # Simulation mode flag
+CONFIG_flag_force=0  # Force mode flag
 CONFIG_flag_root=0  # Check root privileges flag
 CONFIG_config=""  # Configuration file
 CONFIG_status=""  # Status file
@@ -411,6 +412,21 @@ dryrun_token () {
   printf "${msg_dryrun}"
 }
 
+# @info:   Compose force token.
+# @args:   none
+# @return: Force string token
+# @deps:   none
+force_token () {
+  local msg_force
+  if [[ $CONFIG_flag_force -eq 1 ]]
+  then
+    msg_force=" ... force"
+  else
+    msg_force=""
+  fi
+  printf "${msg_force}"
+}
+
 # @info:  Convert seconds to days and time
 # @args:  Seconds
 # @return:  Time string
@@ -566,7 +582,7 @@ process_folder () {
     echo_text -hp -$CONST_level_verbose_info "Checking ${title} folder '${folder}' ... "
     if [[ "${folder}" == *@*:* ]]
     then
-      echo_text -$CONST_level_verbose_info "remote. Proceeding." 
+      echo_text -$CONST_level_verbose_info "remote. Proceeding."
     elif [ -d "${folder}" ]
     then
       echo_text -p -$CONST_level_verbose_info "exists ... "
@@ -574,20 +590,20 @@ process_folder () {
       then
         echo_text -$CONST_level_verbose_info "writable. Proceeding."
       elif [ $CONFIG_flag_dryrun -eq 1 ]
-      then 
+      then
         echo_text -$CONST_level_verbose_info "unwritable. Proceeding$(dryrun_token)."
       else
         echo_text -$CONST_level_verbose_info "unwritable. Exiting."
         fatal_error "${title} folder '${folder}' is unwritable."
       fi
     elif [ -f "${folder}" ]
-    then 
+    then
       echo_text -$CONST_level_verbose_info "is a file. Exiting."
       fatal_error "${title} folder '${folder}' is a file."
     else
       echo_text -$CONST_level_verbose_info "does not exist. "
       if [ $isCreate -eq 0 ]
-      then    
+      then
         echo_text -$CONST_level_verbose_info "Exiting."
         fatal_error "${title} folder '${folder}' does not exist."
       else
@@ -644,6 +660,9 @@ process_options () {
     v)
       CONFIG_level_verbose=$CONST_level_verbose_max
       ;;
+    f)
+      CONFIG_config=$OPTARG
+      ;;
     o)
       case "$OPTARG" in
       0|1|2|3|4|5)
@@ -665,9 +684,6 @@ process_options () {
         ;;
       esac
       CONFIG_level_logging=$OPTARG
-      ;;
-    f)
-      CONFIG_config=$OPTARG
       ;;
     t)
       CONFIG_status=$OPTARG
@@ -694,7 +710,8 @@ process_options () {
 
 # @info:  Create common help texts
 # @opts:
-#    -o ... text for options
+#    -b ... text for basic options
+#    -o ... text for all options
 #    -f ... text for footer
 # @args:  none
 # @return:  text for help
@@ -703,10 +720,10 @@ process_help () {
   local help
   local OPTIND opt
   # Process input parameters
-  while getopts ":of" opt
+  while getopts ":bof" opt
   do
     case "$opt" in
-    o)
+    b)
       help="
 Options and arguments:
 "
@@ -725,18 +742,11 @@ Options and arguments:
         help+="
   -c configs: print listing of all configuration parameters"
       fi
-      if [[ $LIB_options == *l* ]]
-      then
-        help+="
-  -l log_level
-     logging: level of logging intensity to syslog
-     0=none, 1=errors, 2=warnings, 3=info, 4=full (default ${CONFIG_level_logging})"
-      fi
       if [[ $LIB_options == *o* ]]
       then
         help+="
-  -o verbose_level
-     output: level of verbosity
+  -o output_level
+     level of verbosity
      0=none, 1=errors, 2=mails, 3=info, 4=functions, 5=full (default ${CONFIG_level_verbose})"
       fi
       if [[ $LIB_options == *m* ]]
@@ -757,8 +767,16 @@ Options and arguments:
       if [[ $LIB_options == *f* ]]
       then
         help+="
-  -f config_file
-     file: configuration file to be used"
+  -f config_file: configuration file to be used"
+      fi
+      ;;
+    o)
+      ${FUNCNAME[0]} -b
+      if [[ $LIB_options == *l* ]]
+      then
+        help+="  -l log_level
+     logging: level of logging intensity to syslog
+     0=none, 1=errors, 2=warnings, 3=info, 4=full (default ${CONFIG_level_logging})"
       fi
       if [[ $LIB_options == *t* ]]
       then
