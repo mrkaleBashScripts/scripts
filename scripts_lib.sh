@@ -29,10 +29,10 @@ fi
 # -> BEGIN Library configs
 LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.6.0"
+LIB_version="0.7.0"
 # Process default options
 # LIB_options_exclude=( 't' ) # Put such a line in a main script at the very begining of it
-LIB_options=":hsVcmvo:l:f:t:"
+LIB_options=":hsVcmvo:l:f:p:t:"
 for opt in ${LIB_options_exclude[@]}
 do
   LIB_options=${LIB_options//$opt:}
@@ -54,6 +54,7 @@ CONFIG_flag_dryrun=0  # Simulation mode flag
 CONFIG_flag_force=0  # Force mode flag
 CONFIG_flag_root=0  # Check root privileges flag
 CONFIG_config=""  # Configuration file
+CONFIG_credentials=""  # Credentials file
 CONFIG_status=""  # Status file
 # <- END Common working configs
 
@@ -77,6 +78,7 @@ CONST_level_verbose_min=${CONST_level_verbose_none}
 CONST_level_verbose_max=${CONST_level_verbose_full}
 CONST_level_verbose_dft=${CONFIG_level_verbose}
 # <- END _constants
+
 
 # -> BEGIN _functions
 
@@ -498,21 +500,45 @@ check_root () {
 # @return:  message or fatal error
 # @deps:  none
 process_config () {
-  if [ -n "$CONFIG_config" ]
+  if [ -n "${CONFIG_config}" ]
   then
-    echo_text -hp -$CONST_level_verbose_info "Checking configuration file '$CONFIG_config' ... "
-    if [ -f "$CONFIG_config" ]
+    echo_text -hp -$CONST_level_verbose_info "Checking configuration file '${CONFIG_config}' ... "
+    if [ -f "${CONFIG_config}" ]
     then
-      if [ -s "$CONFIG_config" ]
+      if [ -s "${CONFIG_config}" ]
       then
-        source "$CONFIG_config"
+        source "${CONFIG_config}"
         echo_text -$CONST_level_verbose_info "exists and is not empty. Applying."
       else
         echo_text -$CONST_level_verbose_info "is empty. Ignoring."
       fi
     else
       echo_text -$CONST_level_verbose_info "does not exist. Exiting."
-      fatal_error "Configuraton file '$CONFIG_config' does not exist."
+      fatal_error "Configuraton file '${CONFIG_config}' does not exist."
+    fi
+  fi
+}
+
+# @info:  Process credentials file
+# @args:  none
+# @return:  message or fatal error
+# @deps:  none
+process_credentials () {
+  if [ -n "${CONFIG_credentials}" ]
+  then
+    echo_text -hp -$CONST_level_verbose_info "Checking credentials file '${CONFIG_credentials}' ... "
+    if [ -f "${CONFIG_credentials}" ]
+    then
+      if [ -s "${CONFIG_credentials}" ]
+      then
+        source "${CONFIG_credentials}"
+        echo_text -$CONST_level_verbose_info "exists and is not empty. Applying."
+      else
+        echo_text -$CONST_level_verbose_info "is empty. Ignoring."
+      fi
+    else
+      echo_text -$CONST_level_verbose_info "does not exist. Exiting."
+      fatal_error "Credentials file '${CONFIG_credentials}' does not exist."
     fi
   fi
 }
@@ -663,6 +689,9 @@ process_options () {
     f)
       CONFIG_config=$OPTARG
       ;;
+    p)
+      CONFIG_credentials=$OPTARG
+      ;;
     o)
       case "$OPTARG" in
       0|1|2|3|4|5)
@@ -698,6 +727,9 @@ process_options () {
         ;;
       f)
         msg="Missing configuration file for option '-$OPTARG'."
+        ;;
+      p)
+        msg="Missing credentials file for option '-$OPTARG'."
         ;;
       t)
         msg="Missing status (tick) file for option '-$OPTARG'."
@@ -768,6 +800,11 @@ Options and arguments:
       then
         help+="
   -f config_file: configuration file to be used"
+      fi
+      if [[ $LIB_options == *p* ]]
+      then
+        help+="
+  -p permission_file: credentials file to be used"
       fi
       ;;
     o)
@@ -848,6 +885,7 @@ init_script () {
   check_level_loging
   check_commands
   process_config
+  process_credentials
   check_root
 }
 

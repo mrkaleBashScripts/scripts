@@ -38,9 +38,14 @@
 #   -v
 #       Verbose. Display all processing messages.
 #       It is an alias for '-o5'.
+#
 #   -f  ConfigFile
 #       Configuration file for overriding default configuration parameters.
-#       Mainly for credentials.
+#
+#   -p  CredFile
+#       Credentials file with access permissions for overriding default
+#       configuration parameters.
+#
 #   -1
 #       Force mains supply. Pretend powering from electrical mains.
 #   -2
