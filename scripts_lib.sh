@@ -29,7 +29,7 @@ fi
 # -> BEGIN Library configs
 LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.5.0"
+LIB_version="0.6.0"
 # Process default options
 # LIB_options_exclude=( 't' ) # Put such a line in a main script at the very begining of it
 LIB_options=":hsVcmvo:l:f:t:"
@@ -847,8 +847,8 @@ init_script () {
   check_level_verbose
   check_level_loging
   check_commands
-  check_root
   process_config
+  check_root
 }
 
 # <- END _functions
