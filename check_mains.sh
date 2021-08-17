@@ -80,6 +80,7 @@ CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
 CONFIG_version="0.1.0"
 CONFIG_commands=('grep' 'awk') # Array of generally needed commands
 CONFIG_commands_run=('curl') # List of commands for full running
+CONFIG_level_logging=0  # No logging
 CONFIG_flag_root=0	# Check root privileges flag
 CONFIG_flag_force_mains=0
 CONFIG_flag_force_batt=0
@@ -90,6 +91,7 @@ CONFIG_mains_dev=""
 CONFIG_thingsboard_host=""
 CONFIG_thingsboard_token=""
 CONFIG_thingsboard_code=0
+CONFIG_thingsboard_code_OK=200
 # <- END _config
 
 
@@ -184,21 +186,33 @@ write_thingsboard () {
 		reqdata="{${reqdata}}" # Create JSON object
 	fi
 	# Compose HTTP request
-	echo_text -hp -$CONST_level_verbose_info "Sending to ThingsBoard$(dryrun_token) ... ${reqdata}"
+	msg="Sending to ThingsBoard"
+	sep=" ... "
+	echo_text -hp -$CONST_level_verbose_info "${msg}$(dryrun_token)${sep}${reqdata}"
 	if [[ $CONFIG_flag_dryrun -eq 0 && -n "${reqdata}" ]]
 	then
 		CONFIG_thingsboard_code=$(curl --location --silent \
 			--write-out %{http_code} \
 			--output /dev/null \
+			--connect-timeout 3 \
 			--request POST "${CONFIG_thingsboard_host}/api/v1/${CONFIG_thingsboard_token}/telemetry" \
 			--header "Content-Type: application/json" \
 			--data-raw "${reqdata}")
 	else
-		CONFIG_thingsboard_code=200
+		CONFIG_thingsboard_code=${CONFIG_thingsboard_code_OK}
 	fi
-	echo_text -$CONST_level_verbose_info " ... ${CONFIG_thingsboard_code}"
+	if [[ ${CONFIG_thingsboard_code} -ne ${CONFIG_thingsboard_code_OK} ]]
+	then
+		echo_text -$CONST_level_verbose_info "${sep}failed with HTTP status code ${CONFIG_thingsboard_code}. Exiting."
+		fatal_error "${msg} failed with HTTP status code ${CONFIG_thingsboard_code}."
+		return 1
+	else
+		echo_text -$CONST_level_verbose_info "${sep}${CONFIG_thingsboard_code}"
+		return 0
+	fi
 }
 # <- END _functions
+
 
 # Process command line parameters
 process_options $@
