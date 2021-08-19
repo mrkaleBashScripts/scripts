@@ -7,7 +7,7 @@
 #   check_mains.sh [OPTION [ARG]]
 #
 # DESCRIPTION:
-# Script checks if supplying the localserver is from electrical mains or battery
+# Script checks if supplying the local server is from electrical mains or battery
 # and sends its status to ThingsBoard IoT platform for processing alarms.
 # - Script has to be run under root privileges (sudo ...).
 # - Script is supposed to run under cron.
@@ -15,9 +15,9 @@
 # - All essential parameters are defined in the section of configuration parameters.
 #   Their description is provided locally. Script can be configured by changing values of them.
 # - Configuration parameters in the script can be overriden by the corresponding ones
-#   in a configuration file declared in the command line.
+#   in a configuration file or credentials file declared in the command line.
 # - For security reasons the credentials to IoT platform should be written
-#   only in configuration file. Putting them to a command line does not prevent
+#   only in credentials file. Putting them to a command line does not prevent
 #   them to be revealed by cron in email messages as a subject.
 #
 # OPTIONS & ARGS:
@@ -83,7 +83,7 @@ fi
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
 CONFIG_version="0.1.0"
-CONFIG_commands=('grep' 'awk') # Array of generally needed commands
+CONFIG_commands=('grep') # Array of generally needed commands
 CONFIG_commands_run=('curl') # List of commands for full running
 CONFIG_level_logging=0  # No logging
 CONFIG_flag_root=0	# Check root privileges flag
@@ -181,19 +181,22 @@ write_thingsboard () {
 	then
 		reqdata="false"
 	fi
-	if [[ -n "${reqdata}" ]]
+	if [ -n "${reqdata}" ]
 	then
 		reqdata="\"powerSupply\": ${reqdata}"
 	fi
 	# Process request payload
-	if [[ -n "${reqdata}" ]]
-	then
-		reqdata="{${reqdata}}" # Create JSON object
-	fi
-	# Compose HTTP request
 	msg="Sending to ThingsBoard"
 	sep=" ... "
-	echo_text -hp -$CONST_level_verbose_info "${msg}$(dryrun_token)${sep}${reqdata}"
+	if [ -n "${reqdata}" ]
+	then
+		reqdata="{${reqdata}}" # Create JSON object
+	else
+		echo_text -${CONST_level_verbose_info} "${msg}${sep}no payload. Exiting."
+		fatal_error "${msg} failed with no payload."
+fi
+	# Compose HTTP request
+	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)${sep}${reqdata}"
 	if [[ $CONFIG_flag_dryrun -eq 0 && -n "${reqdata}" ]]
 	then
 		CONFIG_thingsboard_code=$(curl --location --silent \
@@ -208,11 +211,11 @@ write_thingsboard () {
 	fi
 	if [[ ${CONFIG_thingsboard_code} -ne ${CONFIG_thingsboard_code_OK} ]]
 	then
-		echo_text -$CONST_level_verbose_info "${sep}failed with HTTP status code ${CONFIG_thingsboard_code}. Exiting."
+		echo_text -${CONST_level_verbose_info} "${sep}failed with HTTP status code ${CONFIG_thingsboard_code}. Exiting."
 		fatal_error "${msg} failed with HTTP status code ${CONFIG_thingsboard_code}."
 		return 1
 	else
-		echo_text -$CONST_level_verbose_info "${sep}${CONFIG_thingsboard_code}"
+		echo_text -${CONST_level_verbose_info} "${sep}${CONFIG_thingsboard_code}"
 		return 0
 	fi
 }
@@ -254,9 +257,9 @@ trap stop_script EXIT
 
 # Processing
 message="Checking mains power supply status"
-echo_text -hp -$CONST_level_verbose_info "${message}$(force_token) ... "
+echo_text -hp -${CONST_level_verbose_info} "${message}$(force_token) ... "
 check_mains
-echo_text -$CONST_level_verbose_info "${CONFIG_mains_status}"
+echo_text -${CONST_level_verbose_info} "${CONFIG_mains_status}"
 
 # Sending to ThingsBoard
 write_thingsboard
