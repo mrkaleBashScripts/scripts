@@ -29,7 +29,7 @@ fi
 # -> BEGIN Library configs
 LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.7.0"
+LIB_version="0.7.1"
 # Process default options
 # LIB_options_exclude=( 't' ) # Put such a line in a main script at the very begining of it
 LIB_options=":hsVcmvo:l:f:p:t:"
@@ -184,7 +184,7 @@ echo_text () {
   local OPTIND opt
   local prefix=""
   local redir=0 before=0 after=0 print=0
-  local level=$CONST_level_verbose_dft
+  local level=${CONST_level_verbose_dft}
   while getopts ":SIWEFLhfswepba012345" opt
   do
     case "$opt" in
@@ -284,7 +284,7 @@ log_text () {
   if [[ $CONFIG_level_logging -ge $level ]]
   then
     shift $(($OPTIND-1))
-    echo_text -f -$CONST_level_verbose_function "Logging to syslog 'user.log' ... $(prefix_token -N)::$prefix$@"
+    echo_text -f -${CONST_level_verbose_function} "Logging to syslog 'user.log' ... $(prefix_token -N)::$prefix$@"
     logger -t "$(prefix_token -N)" "$prefix$@"
   fi
 }
@@ -308,12 +308,12 @@ status_text () {
   if [ -n "$CONFIG_status" ]
   then
     shift $(($OPTIND-1))
-    echo_text -f -$CONST_level_verbose_function "Writing to status file '$CONFIG_status' ... $1"
+    echo_text -f -${CONST_level_verbose_function} "Writing to status file '$CONFIG_status' ... $1"
     if [[ $flag_append -eq  0 && -f "${CONFIG_status}" ]]
     then
       rm "$CONFIG_status" >/dev/null
     fi
-    echo_text -ISL -$CONST_level_verbose_none "$1." >> "$CONFIG_status"
+    echo_text -ISL -${CONST_level_verbose_none} "$1." >> "$CONFIG_status"
   fi
 }
 
@@ -322,7 +322,7 @@ status_text () {
 # @return:  exit 1
 # @deps:  echo_text, log_text
 fatal_error () {
-  echo_text -e  -$CONST_level_verbose_error "$@"
+  echo_text -e  -${CONST_level_verbose_error} "$@"
   log_text  -ES -$CONST_level_logging_error "$@"
   exit 1
 }
@@ -335,23 +335,23 @@ show_configs () {
   local cfgArray
   if [[ $CONFIG_flag_print_configs -eq 1 ]]
   then
-    echo_text -hb -$CONST_level_verbose_none "List of configuration parameters:"
+    echo_text -hb -${CONST_level_verbose_none} "List of configuration parameters:"
     for prm in ${!CONFIG_@}
     do
       cfgArray=$(declare -p $prm 2>/dev/null | grep -i 'declare \-a')
       if [ $? -eq 0 ]
       then
-        echo_text -s -$CONST_level_verbose_none "${cfgArray:11}"
+        echo_text -s -${CONST_level_verbose_none} "${cfgArray:11}"
       else
         if [ -z "${!prm}" ]
         then
-          echo_text -s -$CONST_level_verbose_none "${prm} = <null>"
+          echo_text -s -${CONST_level_verbose_none} "${prm} = <null>"
         else
-          echo_text -s -$CONST_level_verbose_none "${prm} = %s" "${!prm}"
+          echo_text -s -${CONST_level_verbose_none} "${prm} = %s" "${!prm}"
         fi
       fi
     done
-    echo_text -$CONST_level_verbose_none
+    echo_text -${CONST_level_verbose_none}
   fi
 }
 
@@ -382,19 +382,19 @@ check_level_loging () {
 # @return:  none
 # @deps:  none
 check_level_verbose () {
-  if [[ $CONFIG_level_verbose -lt $CONST_level_verbose_min ]]
+  if [[ $CONFIG_level_verbose -lt ${CONST_level_verbose_min} ]]
   then
-    CONFIG_level_verbose=$CONST_level_verbose_min
+    CONFIG_level_verbose=${CONST_level_verbose_min}
   fi
-  if [[ $CONFIG_level_verbose -gt $CONST_level_verbose_max ]]
+  if [[ $CONFIG_level_verbose -gt ${CONST_level_verbose_max} ]]
   then
-    CONFIG_level_verbose=$CONST_level_verbose_max
+    CONFIG_level_verbose=${CONST_level_verbose_max}
   fi
   case "$CONFIG_level_verbose" in
   0|1|2|3|4|5)
     ;;
   *)
-    CONFIG_level_verbose=$CONST_level_verbose_dft
+    CONFIG_level_verbose=${CONST_level_verbose_dft}
     ;;
   esac
 }
@@ -451,7 +451,7 @@ seconds2time () {
 check_commands () {
   local cmd_list="" bad_commands=""
   # Process commands
-  echo_text -hp -$CONST_level_verbose_info "Checking expected commands$(dryrun_token) ... "
+  echo_text -hp -${CONST_level_verbose_info} "Checking expected commands$(dryrun_token) ... "
   cmd_list=${CONFIG_commands_common[@]}
   cmd_list+=" ${CONFIG_commands[@]}"
   if [ $CONFIG_flag_dryrun -eq 1 ]
@@ -470,10 +470,10 @@ check_commands () {
   done
   if [ -n "${bad_commands}" ]
   then
-    echo_text -$CONST_level_verbose_info "not available ...${bad_commands} ... failed. Exiting."
+    echo_text -${CONST_level_verbose_info} "not available ...${bad_commands} ... failed. Exiting."
     fatal_error "Command(s)${bad_commands} not available."
   else
-    echo_text -$CONST_level_verbose_info "all available ... success. Proceeding."
+    echo_text -${CONST_level_verbose_info} "all available ... success. Proceeding."
   fi
 }
 
@@ -484,12 +484,12 @@ check_commands () {
 check_root () {
   if [ $CONFIG_flag_root -eq 1 ]
   then
-    echo_text -hp -$CONST_level_verbose_info "Checking script privilegies$(dryrun_token) ... "
+    echo_text -hp -${CONST_level_verbose_info} "Checking script privilegies$(dryrun_token) ... "
     if [[ $CONFIG_flag_dryrun -eq 1 || $(id -u) -eq 0 ]]
     then
-      echo_text -$CONST_level_verbose_info "ok ... $(whoami). Proceeding."
+      echo_text -${CONST_level_verbose_info} "ok ... $(whoami). Proceeding."
     else
-      echo_text -$CONST_level_verbose_info "has to be run as root. Exiting."
+      echo_text -${CONST_level_verbose_info} "has to be run as root. Exiting."
       fatal_error "Script is not run as root."
     fi
   fi
@@ -502,18 +502,18 @@ check_root () {
 process_config () {
   if [ -n "${CONFIG_config}" ]
   then
-    echo_text -hp -$CONST_level_verbose_info "Checking configuration file '${CONFIG_config}' ... "
+    echo_text -hp -${CONST_level_verbose_info} "Checking configuration file '${CONFIG_config}' ... "
     if [ -f "${CONFIG_config}" ]
     then
       if [ -s "${CONFIG_config}" ]
       then
         source "${CONFIG_config}"
-        echo_text -$CONST_level_verbose_info "exists and is not empty. Applying."
+        echo_text -${CONST_level_verbose_info} "exists and is not empty. Applying."
       else
-        echo_text -$CONST_level_verbose_info "is empty. Ignoring."
+        echo_text -${CONST_level_verbose_info} "is empty. Ignoring."
       fi
     else
-      echo_text -$CONST_level_verbose_info "does not exist. Exiting."
+      echo_text -${CONST_level_verbose_info} "does not exist. Exiting."
       fatal_error "Configuraton file '${CONFIG_config}' does not exist."
     fi
   fi
@@ -526,18 +526,18 @@ process_config () {
 process_credentials () {
   if [ -n "${CONFIG_credentials}" ]
   then
-    echo_text -hp -$CONST_level_verbose_info "Checking credentials file '${CONFIG_credentials}' ... "
+    echo_text -hp -${CONST_level_verbose_info} "Checking credentials file '${CONFIG_credentials}' ... "
     if [ -f "${CONFIG_credentials}" ]
     then
       if [ -s "${CONFIG_credentials}" ]
       then
         source "${CONFIG_credentials}"
-        echo_text -$CONST_level_verbose_info "exists and is not empty. Applying."
+        echo_text -${CONST_level_verbose_info} "exists and is not empty. Applying."
       else
-        echo_text -$CONST_level_verbose_info "is empty. Ignoring."
+        echo_text -${CONST_level_verbose_info} "is empty. Ignoring."
       fi
     else
-      echo_text -$CONST_level_verbose_info "does not exist. Exiting."
+      echo_text -${CONST_level_verbose_info} "does not exist. Exiting."
       fatal_error "Credentials file '${CONFIG_credentials}' does not exist."
     fi
   fi
@@ -590,7 +590,7 @@ process_folder () {
   then
     if [ $isError -eq 1 ]
     then
-      echo_text -h -$CONST_level_verbose_info "${title} ${object} declared neither in command line nor configuration file. Exiting."
+      echo_text -h -${CONST_level_verbose_info} "${title} ${object} declared neither in command line nor configuration file. Exiting."
       fatal_error "${title} ${object} not declared."
     else
       return 0
@@ -605,52 +605,52 @@ process_folder () {
   # Check folder permission
   if [ $isExist -eq 0 ]
   then
-    echo_text -hp -$CONST_level_verbose_info "Checking ${title} folder '${folder}' ... "
+    echo_text -hp -${CONST_level_verbose_info} "Checking ${title} folder '${folder}' ... "
     if [[ "${folder}" == *@*:* ]]
     then
-      echo_text -$CONST_level_verbose_info "remote. Proceeding."
+      echo_text -${CONST_level_verbose_info} "remote. Proceeding."
     elif [ -d "${folder}" ]
     then
-      echo_text -p -$CONST_level_verbose_info "exists ... "
+      echo_text -p -${CONST_level_verbose_info} "exists ... "
       if chk_folder_writable "${folder}"
       then
-        echo_text -$CONST_level_verbose_info "writable. Proceeding."
+        echo_text -${CONST_level_verbose_info} "writable. Proceeding."
       elif [ $CONFIG_flag_dryrun -eq 1 ]
       then
-        echo_text -$CONST_level_verbose_info "unwritable. Proceeding$(dryrun_token)."
+        echo_text -${CONST_level_verbose_info} "unwritable. Proceeding$(dryrun_token)."
       else
-        echo_text -$CONST_level_verbose_info "unwritable. Exiting."
+        echo_text -${CONST_level_verbose_info} "unwritable. Exiting."
         fatal_error "${title} folder '${folder}' is unwritable."
       fi
     elif [ -f "${folder}" ]
     then
-      echo_text -$CONST_level_verbose_info "is a file. Exiting."
+      echo_text -${CONST_level_verbose_info} "is a file. Exiting."
       fatal_error "${title} folder '${folder}' is a file."
     else
-      echo_text -$CONST_level_verbose_info "does not exist. "
+      echo_text -${CONST_level_verbose_info} "does not exist. "
       if [ $isCreate -eq 0 ]
       then
-        echo_text -$CONST_level_verbose_info "Exiting."
+        echo_text -${CONST_level_verbose_info} "Exiting."
         fatal_error "${title} folder '${folder}' does not exist."
       else
         # Create folder
-        echo_text -p -$CONST_level_verbose_info "Creating ... "
+        echo_text -p -${CONST_level_verbose_info} "Creating ... "
         if mkdir -p "${folder}" >/dev/null 2>&1
         then
-          echo_text -$CONST_level_verbose_info "success. Proceeding."
+          echo_text -${CONST_level_verbose_info} "success. Proceeding."
         else
-          echo_text -$CONST_level_verbose_info "failed. Exiting."
+          echo_text -${CONST_level_verbose_info} "failed. Exiting."
           fatal_error "${title} folder '${folder}' cannot be created."
         fi
       fi
     fi
   else
-    echo_text -hp -$CONST_level_verbose_info "Checking ${title} ${object} '${folder}' ... "
+    echo_text -hp -${CONST_level_verbose_info} "Checking ${title} ${object} '${folder}' ... "
     if [ \( $isFile -eq 1 -a -f "${folder}" \) -o \( $isFile -eq 0 -a -d "${folder}" \) ]
     then
-      echo_text -$CONST_level_verbose_info "exists. Proceeding."
+      echo_text -${CONST_level_verbose_info} "exists. Proceeding."
     else
-      echo_text -$CONST_level_verbose_info "missing. Exiting."
+      echo_text -${CONST_level_verbose_info} "missing. Exiting."
       fatal_error "${title} ${object} '${folder}' does not exist."
     fi
   fi
@@ -681,10 +681,10 @@ process_options () {
       CONFIG_flag_print_configs=1
       ;;
     m)
-      CONFIG_level_verbose=$CONST_level_verbose_mail
+      CONFIG_level_verbose=${CONST_level_verbose_mail}
       ;;
     v)
-      CONFIG_level_verbose=$CONST_level_verbose_max
+      CONFIG_level_verbose=${CONST_level_verbose_max}
       ;;
     f)
       CONFIG_config=$OPTARG
@@ -854,7 +854,7 @@ show_manifest () {
     action="Running"
     ;;
   esac
-  echo_text -ba -$CONST_level_verbose_mail "${action} ${CONFIG_script} ${CONFIG_version} for system $(hostname) -- $(date)."
+  echo_text -ba -${CONST_level_verbose_mail} "${action} ${CONFIG_script} ${CONFIG_version} for system $(hostname) -- $(date)."
   log_text -$CONST_level_logging_info "${action}."
 }
 
