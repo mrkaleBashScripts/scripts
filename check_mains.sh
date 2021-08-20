@@ -200,12 +200,12 @@ fi
 	if [[ $CONFIG_flag_dryrun -eq 0 && -n "${reqdata}" ]]
 	then
 		CONFIG_thingsboard_code=$(curl --location --silent \
-			--write-out %{http_code} \
-			--output /dev/null \
-			--connect-timeout 3 \
-			--request POST "${CONFIG_thingsboard_host}/api/v1/${CONFIG_thingsboard_token}/telemetry" \
-			--header "Content-Type: application/json" \
-			--data-raw "${reqdata}")
+--write-out %{http_code} \
+--output /dev/null \
+--connect-timeout 3 \
+--request POST "${CONFIG_thingsboard_host}/api/v1/${CONFIG_thingsboard_token}/telemetry" \
+--header "Content-Type: application/json" \
+--data-raw "${reqdata}")
 	else
 		CONFIG_thingsboard_code=${CONFIG_thingsboard_code_OK}
 	fi
