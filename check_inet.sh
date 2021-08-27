@@ -4,7 +4,7 @@
 #   check_inet.sh - Check status of internet connection
 #
 # SYNOPSIS:
-#   check_inet.sh [OPTION [ARG]]
+#   check_inet.sh [OPTION [ARG]] ICSE_devfile [log_file]
 #
 # DESCRIPTION:
 # Script checks if the local server has connection to the internet, i.e.,
@@ -17,11 +17,25 @@
 #   Their description is provided locally. Script can be configured by changing values of them.
 # - Configuration parameters in the script can be overriden by the corresponding ones
 #   in a configuration file or credentials file declared in the command line.
+#   In the same way can be defined mandatory arguments.
 # - For security reasons the credentials to IoT platform should be written
 #   only in credentials file. Putting them to a command line does not prevent
 #   them to be revealed by cron in email messages as a subject.
+# - The script controls the USB relay board ICSE013A with 2 relays both at once.
+# - One of relay supplies the internet router and work in oposite order, i.e.,
+#   Normally Closed ports are utilized and relay supplies in OFF state.
+# - At detection internet outage, the script starts countdown and executes itself
+#   3 times. If there is still outage, the script turns the relay ON, which means
+#   switching OFF the router. In this state the script starts new countdown
+#   and executes itself 3 times as a waiting period for discharching the router.
+#   Then the script turns the relay OFF again, which connects mains to the router
+#   and starts the entire process again. If the internet connection is restored
+#   during that process, the script waits to another internet outage for rebooting
+#   router again.
+# - Entire process with turning ON and OFF the relays is repeated until the
+#   internet connection is restored even if it might be useless.
 #
-# OPTIONS & ARGS:
+# OPTIONS:
 #   -h
 #       Help. Show usage description and exit.
 #   -s
@@ -47,10 +61,16 @@
 #       Credentials file with access permissions for overriding default
 #       configuration parameters.
 #
-#   -1
-#       Force internet connection. Pretend function internet.
-#   -2
-#       Force no connection. Pretend broken internet connection.
+#   -1  Force internet connection
+#       Pretend function internet.
+#
+#   -2  Force no connection
+#       Pretend broken internet connection.
+#
+# ARGS:
+#   ICSE_devfile  Device file of a relay board in '/dev' folder
+#   log_file      Alternative log file to default one for persisting working
+#                 variables
 #
 # LICENSE:
 # This program is free software; you can redistribute it and/or modify
@@ -83,104 +103,195 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.1.0"
-CONFIG_commands=('grep' 'ping') # Array of generally needed commands
+CONFIG_version="0.2.0"
+CONFIG_commands=('grep' 'ping' 'xxd') # Array of generally needed commands
 CONFIG_commands_run=('curl') # List of commands for full running
 CONFIG_level_logging=0  # No logging
-CONFIG_flag_root=0	# Check root privileges flag
+CONFIG_flag_root=1	# Check root privileges flag
 CONFIG_flag_force_inet=0
 CONFIG_flag_force_idle=0
 CONFIG_inet_ip="8.8.4.4"	# External test IP address of Google, inc.
-CONFIG_inet_active="ON"
-CONFIG_inet_idle="OFF"
+CONFIG_active="ON"
+CONFIG_idle="OFF"
 CONFIG_inet_status=""
 CONFIG_thingsboard_host=""
 CONFIG_thingsboard_token=""
 CONFIG_thingsboard_code=0
 CONFIG_thingsboard_code_OK=200
+CONFIG_icse_file=""	# Device file of the relay board
+CONFIG_log_file="/tmp/${CONFIG_script}.dat"	# Persistent log file
+CONFIG_log_count=3	# Count-down periods
 # <- END _config
 
 
 # -> BEGIN _functions
 
-# @info:	Display usage description
-# @args:	(none)
-# @return:	(none)
-# @deps:	(none)
+# @info: Display usage description
+# @args: none
+# @return: none
+# @deps: none
 show_help () {
 	echo
-	echo "${CONFIG_script} [OPTION [ARG]]"
+	echo "${CONFIG_script} [OPTION [ARG]] ICSE_devfile [log_file]"
 	echo "
 Check internet connection status and send it to ThinsBoard IoT platform.
+Temporarily turn off the ICSE relay for rebooting a router after a couple of
+running periods.
 $(process_help -b)
   -1 pretend (force) correct connection
   -2 pretend (force) failed connection
+
+  ICSE_devfile: device file of a relay board in '/dev' folder
+  log_file: alternative log file to default one for persisting working variables
 $(process_help -f)
 "
 }
 
-# @info:	Actions at finishing script invoked by 'trap'
-# @args:	none
-# @return:	none
-# @deps:	Overloaded library function
+# @info: Intialize log variables
+# @return: LOG_* variables
+# @deps: CONFIG_* variables
+init_logvars () {
+	LOG_relay=${CONFIG_active}
+	LOG_period=${CONFIG_log_count}
+	LOG_toggle=0
+}
+
+# @info: Save log variables to log file
+# @args: none
+# @return: none
+# @deps: LOG_* variables
+save_logvars () {
+	if [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
+	then
+		set | grep "^LOG_" > "${CONFIG_log_file}"
+	elif [[ -f "${CONFIG_log_file}" ]]
+	then
+		rm "${CONFIG_log_file}"
+	fi
+}
+
+# @info: Actions at finishing script invoked by 'trap'
+# @args: none
+# @return: none
+# @deps: Overloaded library function
 stop_script () {
+	save_logvars
 	show_manifest STOP
 }
 
-# @info:	 Checking internet connection
-# @args:	 none
+# @info:  Checking internet connection
+# @args:  none
 # @return: global config variable
-# @deps:	 Overloaded library function
+# @deps:  Overloaded library function
 check_inet () {
+	msg="Checking internet connection status"
+	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token) ... "
 	# Dry run simulation
 	if [[ ${CONFIG_flag_force_inet} -eq 1 ]]
 	then
-		CONFIG_inet_status=${CONFIG_inet_active}
-		return
+		CONFIG_inet_status=${CONFIG_active}
 	elif [[ ${CONFIG_flag_force_idle} -eq 1 ]]
 	then
-		CONFIG_inet_status=${CONFIG_inet_idle}
-		return
-	fi
+		CONFIG_inet_status=${CONFIG_idle}
 	# Check connection to internet
-	TestIP=${CONFIG_inet_ip}
-	if [ -n "${TestIP}" ]
-	then
-		ping -c1 -w5 ${TestIP} >/dev/null
-		if [ $? -eq 0 ]
+	else
+		TestIP=${CONFIG_inet_ip}
+		if [ -n "${TestIP}" ]
 		then
-			CONFIG_inet_status=${CONFIG_inet_active}
-		else
-			CONFIG_inet_status=${CONFIG_inet_idle}
+			ping -c1 -w5 ${TestIP} >/dev/null
+			if [ $? -eq 0 ]
+			then
+				CONFIG_inet_status=${CONFIG_active}
+			else
+				CONFIG_inet_status=${CONFIG_idle}
+			fi
 		fi
-fi
+	fi
+	echo_text -${CONST_level_verbose_info} "${CONFIG_inet_status}"
 }
 
-# @info:	 Send data to ThingsBoard IoT platform
-# @args:	 none
-# @return: global CONFIG_thingsboard_code variable
-# @deps:	 global CONFIG_mains variables
-write_thingsboard () {
-	local reqdata
-	# Compose data items for a HTTP request payload
-	if [[ "${CONFIG_inet_status}" == "${CONFIG_inet_active}" ]]
+# @info: Toggle relay
+# @return: LOG_* variables
+# @deps: CONFIG_* variables
+relay_toggle () {
+	echo_text -hp -${CONST_level_verbose_info} "Toggling relay '${CONFIG_icse_file}'$(dryrun_token) ... "
+	if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
 	then
-		reqdata="true"
-	elif [[ "${CONFIG_inet_status}" == "${CONFIG_inet_idle}" ]]
-	then
-		reqdata="false"
+		# Control both relays on the board at once
+		control_byte="03"
+		LOG_relay=${CONFIG_idle}
 	else
-		reqdata=""
+		control_byte="00"
+		LOG_relay=${CONFIG_active}
 	fi
-	if [ -n "${reqdata}" ]
+	if [[ $CONFIG_flag_dryrun -eq 0 ]]
 	then
-		reqdata="\"inetConnect\": ${reqdata}"
+		echo "${control_byte}" | xxd -r -p > ${CONFIG_icse_file}
+	fi
+	echo_text -${CONST_level_verbose_info} "to ${LOG_relay} by ${control_byte}"
+	LOG_period=${CONFIG_log_count}
+	LOG_toggle=1
+}
+
+# @info: Toggle relay
+# @return: LOG_* variables
+# @deps: CONFIG_* variables
+relay_control () {
+	if [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
+	then
+		((LOG_period--))
+		echo_text -h -${CONST_level_verbose_info} "Countdown ... Inet ${CONFIG_inet_status}, Relay ${LOG_relay}, Period ${LOG_period}"
+		if [[ ${LOG_period} -le 0 ]]
+		then
+			relay_toggle
+		fi
+	fi
+}
+
+# @info:  Send data to ThingsBoard IoT platform
+# @args:  none
+# @return: global CONFIG_thingsboard_code variable
+# @deps:  global CONFIG_mains variables
+write_thingsboard () {
+	local reqdata inet relay
+	# Compose data item for internet connection status
+	if [[ "${CONFIG_inet_status}" == "${CONFIG_active}" ]]
+	then
+		inet="true"
+	elif [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
+	then
+		inet="false"
+	else
+		inet=""
+	fi
+	if [ -n "${inet}" ]
+	then
+		reqdata="${reqdata}\"inetConnect\":${inet},"
+	fi
+	# Compose data item for relay toggling
+	if [[ ${LOG_toggle} -eq 1 ]]
+	then
+		if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
+		then
+			relay="true"
+		elif [[ "${LOG_relay}" == "${CONFIG_idle}" ]]
+		then
+			relay="false"
+		else
+			relay=""
+		fi
+		if [ -n "${relay}" ]
+		then
+			reqdata="${reqdata}\"inetRelay\":${relay},"
+		fi
+		LOG_toggle=0
 	fi
 	# Process request payload
 	msg="Sending to ThingsBoard"
 	sep=" ... "
 	if [ -n "${reqdata}" ]
 	then
+		reqdata=${reqdata::-1}
 		reqdata="{${reqdata}}" # Create JSON object
 	else
 		echo_text -${CONST_level_verbose_info} "${msg}${sep}no payload. Exiting."
@@ -240,19 +351,39 @@ do
 	esac
 done
 
+# Process non-option arguments
+shift $(($OPTIND-1))
+# Relay device file
+if [ -n "$1" ]
+then
+	CONFIG_icse_file="$1"
+fi
+# Log file
+if [ -n "$2" ]
+then
+	CONFIG_log_file="$2"
+fi
+
 init_script
 show_configs
+
+process_folder -t "ICSE /dev" -fe "${CONFIG_icse_file}"
+process_folder -t "Log" -cfe "${CONFIG_log_file}"
 
 # -> Script execution
 trap stop_script EXIT
 
-# Processing
-message="Checking internet connection status"
-echo_text -hp -${CONST_level_verbose_info} "${message}$(force_token) ... "
-check_inet
-echo_text -${CONST_level_verbose_info} "${CONFIG_inet_status}"
+# Initialize log variables
+init_logvars
 
-# Sending to ThingsBoard
+# Update log variables from log file
+if [ -s "${CONFIG_log_file}" ]
+then
+	source "${CONFIG_log_file}"
+fi
+
+check_inet
+relay_control
 write_thingsboard
 
 # End of script processed by TRAP

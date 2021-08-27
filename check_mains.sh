@@ -20,7 +20,7 @@
 #   only in credentials file. Putting them to a command line does not prevent
 #   them to be revealed by cron in email messages as a subject.
 #
-# OPTIONS & ARGS:
+# OPTIONS:
 #   -h
 #       Help. Show usage description and exit.
 #   -s
@@ -46,10 +46,11 @@
 #       Credentials file with access permissions for overriding default
 #       configuration parameters.
 #
-#   -1
-#       Force mains supply. Pretend powering from electrical mains.
-#   -2
-#       Force battery supply. Pretend failed electrical mains.
+#   -1  Force mains supply
+#       Pretend powering from electrical mains.
+#
+#   -2  Force battery supply
+#       Pretend failed electrical mains.
 #
 # LICENSE:
 # This program is free software; you can redistribute it and/or modify
@@ -114,10 +115,10 @@ fi
 
 # -> BEGIN _functions
 
-# @info:	Display usage description
-# @args:	(none)
-# @return:	(none)
-# @deps:	(none)
+# @info: Display usage description
+# @args: none
+# @return: none
+# @deps: none
 show_help () {
 	echo
 	echo "${CONFIG_script} [OPTION [ARG]]"
@@ -130,18 +131,18 @@ $(process_help -f)
 "
 }
 
-# @info:	Actions at finishing script invoked by 'trap'
-# @args:	none
-# @return:	none
-# @deps:	Overloaded library function
+# @info: Actions at finishing script invoked by 'trap'
+# @args: none
+# @return: none
+# @deps: Overloaded library function
 stop_script () {
 	show_manifest STOP
 }
 
-# @info:	 Checking mains status
-# @args:	 none
+# @info:  Checking mains status
+# @args:  none
 # @return: global config variable
-# @deps:	 Overloaded library function
+# @deps:  Overloaded library function
 check_mains () {
 	# Dry run simulation
 	if [[ ${CONFIG_flag_force_mains} -eq 1 ]]
@@ -167,10 +168,10 @@ check_mains () {
 	fi
 }
 
-# @info:	 Send data to ThingsBoard IoT platform
-# @args:	 none
+# @info:  Send data to ThingsBoard IoT platform
+# @args:  none
 # @return: global CONFIG_thingsboard_code variable
-# @deps:	 global CONFIG_mains variables
+# @deps:  global CONFIG_mains variables
 write_thingsboard () {
 	local reqdata
 	# Compose data items for a HTTP request payload
