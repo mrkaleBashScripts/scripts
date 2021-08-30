@@ -296,11 +296,11 @@ write_thingsboard () {
 		else
 			relay=""
 		fi
-		if [ -n "${relay}" ]
-		then
-			reqdata="${reqdata}\"inetRelay\":${relay},"
-		fi
 		LOG_toggle=0
+	fi
+	if [ -n "${relay}" ]
+	then
+		reqdata="${reqdata}\"inetRelay\":${relay},"
 	fi
 	# Process request payload
 	msg="Sending to ThingsBoard"
