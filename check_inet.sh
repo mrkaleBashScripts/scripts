@@ -274,6 +274,10 @@ write_thingsboard () {
 	if [[ "${CONFIG_inet_status}" == "${CONFIG_active}" ]]
 	then
 		inet="true"
+		if [ -f "${CONFIG_log_file}" ]
+		then
+			relay="true"
+		fi
 	elif [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
 	then
 		inet="false"
