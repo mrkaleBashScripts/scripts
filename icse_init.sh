@@ -46,6 +46,10 @@
 #   -f  ConfigFile
 #       Configuration file for overriding default configuration parameters.
 #
+#   -t StatusFile
+#       Tick file for writing working status of the script.
+#       Should be located in temporary file system.
+#
 #   -p  CredFile
 #       Credentials file with access permissions for overriding default
 #       configuration parameters.
@@ -84,13 +88,14 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.1.0"
+CONFIG_version="0.2.0"
 CONFIG_commands=('xxd') # Array of generally needed commands
 CONFIG_commands_run=('') # List of commands for full running
 CONFIG_level_logging=0  # No logging
-CONFIG_flag_root=0	# Check root privileges flag
+CONFIG_flag_root=1	# Check root privileges flag
 CONFIG_icse_file=""	# Device file of the relay board
 CONFIG_icse_delay=1	# Delay in seconds between control bytes sending
+CONFIG_status="/tmp/${CONFIG_script}.inf"  # Status file
 # <- END _config
 
 
@@ -150,6 +155,7 @@ fi
 init_script
 
 process_folder -t "ICSE /dev" -fe "${CONFIG_icse_file}"
+process_folder -t "Status" -f "${CONFIG_status}"
 
 show_configs
 
@@ -157,10 +163,18 @@ show_configs
 trap stop_script EXIT
 
 # Processing
-msg="Initializing ICSE device ${CONFIG_icse_file}"
-echo_text -hp -${CONST_level_verbose_info} "${msg} ... "
+msg="Initializing ICSE device '${CONFIG_icse_file}'"
+echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token) ... "
 init="50 50 50 50 51 52 00 00"
-echo "${init}" | xxd -r -p > "${CONFIG_icse_file}" ; sleep ${CONFIG_icse_delay}
-echo_text -${CONST_level_verbose_info} "OK"
+if [[ $CONFIG_flag_dryrun -eq 0 ]]
+then
+	echo "${init}" | xxd -r -p > "${CONFIG_icse_file}" ; sleep ${CONFIG_icse_delay}
+fi
+echo_text -${CONST_level_verbose_info} "OK."
+if [ -n "${CONFIG_status}" ]
+then
+	echo_text -s -${CONST_level_verbose_info} "Writing to status file ... '${CONFIG_status}'."
+	echo_text -ISL -${CONST_level_verbose_none} "${msg}." > "${CONFIG_status}"
+fi
 
 # End of script processed by TRAP

@@ -46,6 +46,10 @@
 #       Credentials file with access permissions for overriding default
 #       configuration parameters.
 #
+#   -t StatusFile
+#       Tick file for writing working status of the script.
+#       Should be located in temporary file system.
+#
 #   -1  Force mains supply
 #       Pretend powering from electrical mains.
 #
@@ -83,11 +87,11 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.1.0"
+CONFIG_version="0.2.0"
 CONFIG_commands=('grep') # Array of generally needed commands
 CONFIG_commands_run=('curl') # List of commands for full running
 CONFIG_level_logging=0  # No logging
-CONFIG_flag_root=0	# Check root privileges flag
+CONFIG_flag_root=1	# Check root privileges flag
 CONFIG_flag_force_mains=0
 CONFIG_flag_force_batt=0
 CONFIG_mains_active="ON"
@@ -98,6 +102,7 @@ CONFIG_thingsboard_host=""
 CONFIG_thingsboard_token=""
 CONFIG_thingsboard_code=0
 CONFIG_thingsboard_code_OK=200
+CONFIG_status="/tmp/${CONFIG_script}.inf"  # Status file
 # <- END _config
 
 
@@ -144,27 +149,34 @@ stop_script () {
 # @return: global config variable
 # @deps:  Overloaded library function
 check_mains () {
+	msg="Checking mains power supply status"
+	sep=" ... "
+	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
 	# Dry run simulation
 	if [[ ${CONFIG_flag_force_mains} -eq 1 ]]
 	then
 		CONFIG_mains_status=${CONFIG_mains_active}
-		return
 	elif [[ ${CONFIG_flag_force_batt} -eq 1 ]]
 	then
 		CONFIG_mains_status=${CONFIG_mains_idle}
-		return
-	fi
-	# Reading system file
-	MAINS_file="/sys/class/power_supply/${CONFIG_mains_dev}/online"
-	MAINS_status=$(cat ${MAINS_file})
-	if [[ ${MAINS_status} -eq 1 ]]
-	then
-		CONFIG_mains_status=${CONFIG_mains_active}
-	elif [[ ${MAINS_status} -eq 0 ]]
-	then
-		CONFIG_mains_status=${CONFIG_mains_idle}
 	else
-		CONFIG_mains_status=""
+		# Reading system file
+		MAINS_file="/sys/class/power_supply/${CONFIG_mains_dev}/online"
+		MAINS_status=$(cat ${MAINS_file})
+		if [[ ${MAINS_status} -eq 1 ]]
+		then
+			CONFIG_mains_status=${CONFIG_mains_active}
+		elif [[ ${MAINS_status} -eq 0 ]]
+		then
+			CONFIG_mains_status=${CONFIG_mains_idle}
+		else
+			CONFIG_mains_status=""
+		fi
+	fi
+	echo_text -${CONST_level_verbose_info} "${CONFIG_mains_status}."
+	if [ -n "${CONFIG_status}" ]
+	then
+		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_mains_status}." >> "${CONFIG_status}"
 	fi
 }
 
@@ -210,14 +222,17 @@ fi
 	else
 		CONFIG_thingsboard_code=${CONFIG_thingsboard_code_OK}
 	fi
+	result="HTTP status code ${CONFIG_thingsboard_code}"
 	if [[ ${CONFIG_thingsboard_code} -ne ${CONFIG_thingsboard_code_OK} ]]
 	then
-		echo_text -${CONST_level_verbose_info} "${sep}failed with HTTP status code ${CONFIG_thingsboard_code}. Exiting."
-		fatal_error "${msg} failed with HTTP status code ${CONFIG_thingsboard_code}."
-		return 1
+		echo_text -${CONST_level_verbose_info} "${sep}failed with ${result}. Exiting."
+		fatal_error "${msg} failed with ${result}."
 	else
-		echo_text -${CONST_level_verbose_info} "${sep}${CONFIG_thingsboard_code}"
-		return 0
+		echo_text -${CONST_level_verbose_info} "${sep}${result}"
+	fi
+	if [ -n "${CONFIG_status}" ]
+	then
+		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
 	fi
 }
 # <- END _functions
@@ -253,16 +268,18 @@ done
 init_script
 show_configs
 
+process_folder -t "Status" -f "${CONFIG_status}"
+
 # -> Script execution
 trap stop_script EXIT
 
-# Processing
-message="Checking mains power supply status"
-echo_text -hp -${CONST_level_verbose_info} "${message}$(force_token) ... "
-check_mains
-echo_text -${CONST_level_verbose_info} "${CONFIG_mains_status}"
+if [ -n "${CONFIG_status}" ]
+then
+	echo_text -s -${CONST_level_verbose_info} "Writing to status file ... '${CONFIG_status}'."
+	echo "" > "${CONFIG_status}"
+fi
 
-# Sending to ThingsBoard
+check_mains
 write_thingsboard
 
 # End of script processed by TRAP

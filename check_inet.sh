@@ -61,6 +61,10 @@
 #       Credentials file with access permissions for overriding default
 #       configuration parameters.
 #
+#   -t StatusFile
+#       Tick file for writing working status of the script.
+#       Should be located in temporary file system.
+#
 #   -1  Force internet connection
 #       Pretend function internet.
 #
@@ -103,7 +107,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.2.0"
+CONFIG_version="0.3.0"
 CONFIG_commands=('grep' 'ping' 'xxd') # Array of generally needed commands
 CONFIG_commands_run=('curl') # List of commands for full running
 CONFIG_level_logging=0  # No logging
@@ -121,6 +125,7 @@ CONFIG_thingsboard_code_OK=200
 CONFIG_icse_file=""	# Device file of the relay board
 CONFIG_log_file="/tmp/${CONFIG_script}.dat"	# Persistent log file
 CONFIG_log_count=3	# Count-down periods
+CONFIG_status="/tmp/${CONFIG_script}.inf"  # Status file
 # <- END _config
 
 
@@ -207,14 +212,20 @@ check_inet () {
 			fi
 		fi
 	fi
-	echo_text -${CONST_level_verbose_info} "${CONFIG_inet_status}"
+	echo_text -${CONST_level_verbose_info} "${CONFIG_inet_status}."
+	if [ -n "${CONFIG_status}" ]
+	then
+		echo_text -ISL -${CONST_level_verbose_none} "${msg} ... ${CONFIG_inet_status}." >> "${CONFIG_status}"
+	fi
 }
 
 # @info: Toggle relay
 # @return: LOG_* variables
 # @deps: CONFIG_* variables
 relay_toggle () {
-	echo_text -hp -${CONST_level_verbose_info} "Toggling relay '${CONFIG_icse_file}'$(dryrun_token) ... "
+	msg="Toggling relay '${CONFIG_icse_file}'"
+	sep=" ... "
+	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)"
 	if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
 	then
 		# Control both relays on the board at once
@@ -228,9 +239,14 @@ relay_toggle () {
 	then
 		echo "${control_byte}" | xxd -r -p > ${CONFIG_icse_file}
 	fi
-	echo_text -${CONST_level_verbose_info} "to ${LOG_relay} by ${control_byte}"
+	result="${sep}to ${LOG_relay} by ${control_byte}."
+	echo_text -${CONST_level_verbose_info} "${result}"
 	LOG_period=${CONFIG_log_count}
 	LOG_toggle=1
+	if [ -n "${CONFIG_status}" ]
+	then
+		echo_text -ISL -${CONST_level_verbose_none} "${msg}${result}" >> "${CONFIG_status}"
+	fi
 }
 
 # @info: Toggle relay
@@ -311,14 +327,17 @@ write_thingsboard () {
 	else
 		CONFIG_thingsboard_code=${CONFIG_thingsboard_code_OK}
 	fi
+	result="HTTP status code ${CONFIG_thingsboard_code}"
 	if [[ ${CONFIG_thingsboard_code} -ne ${CONFIG_thingsboard_code_OK} ]]
 	then
-		echo_text -${CONST_level_verbose_info} "${sep}failed with HTTP status code ${CONFIG_thingsboard_code}. Exiting."
-		fatal_error "${msg} failed with HTTP status code ${CONFIG_thingsboard_code}."
-		return 1
+		echo_text -${CONST_level_verbose_info} "${sep}failed with ${result}. Exiting."
+		fatal_error "${msg} failed with ${result}."
 	else
-		echo_text -${CONST_level_verbose_info} "${sep}${CONFIG_thingsboard_code}"
-		return 0
+		echo_text -${CONST_level_verbose_info} "${sep}${CONFIG_thingsboard_code}."
+	fi
+	if [ -n "${CONFIG_status}" ]
+	then
+		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
 	fi
 }
 # <- END _functions
@@ -367,8 +386,9 @@ fi
 init_script
 show_configs
 
-process_folder -t "ICSE /dev" -fe "${CONFIG_icse_file}"
+process_folder -t "ICSE '/dev'" -fe "${CONFIG_icse_file}"
 process_folder -t "Log" -cfe "${CONFIG_log_file}"
+process_folder -t "Status" -f "${CONFIG_status}"
 
 # -> Script execution
 trap stop_script EXIT
@@ -380,6 +400,12 @@ init_logvars
 if [ -s "${CONFIG_log_file}" ]
 then
 	source "${CONFIG_log_file}"
+fi
+
+if [ -n "${CONFIG_status}" ]
+then
+	echo_text -s -${CONST_level_verbose_info} "Writing to status file ... '${CONFIG_status}'."
+	echo "" > "${CONFIG_status}"
 fi
 
 check_inet

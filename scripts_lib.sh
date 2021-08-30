@@ -806,6 +806,12 @@ Options and arguments:
         help+="
   -p permission_file: credentials file to be used"
       fi
+      if [[ $LIB_options == *t* ]]
+      then
+        help+="
+  -t status_file
+     tick: file for writing working status"
+      fi
       ;;
     o)
       ${FUNCNAME[0]} -b
@@ -814,12 +820,6 @@ Options and arguments:
         help+="  -l log_level
      logging: level of logging intensity to syslog
      0=none, 1=errors, 2=warnings, 3=info, 4=full (default ${CONFIG_level_logging})"
-      fi
-      if [[ $LIB_options == *t* ]]
-      then
-        help+="
-  -t status_file
-     tick: file for writing working status"
       fi
       ;;
     f)
