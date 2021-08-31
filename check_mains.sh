@@ -87,7 +87,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.2.0"
+CONFIG_version="0.3.0"
 CONFIG_commands=('grep') # Array of generally needed commands
 CONFIG_commands_run=('curl') # List of commands for full running
 CONFIG_level_logging=0  # No logging
@@ -100,6 +100,8 @@ CONFIG_mains_status=""
 CONFIG_mains_dev=""
 CONFIG_thingsboard_host=""
 CONFIG_thingsboard_token=""
+CONFIG_thingsboard_fail_count=3 # HTTP request retries
+CONFIG_thingsboard_fail_delay=5 # Retry seconds for another HTTP request
 CONFIG_thingsboard_code=0
 CONFIG_thingsboard_code_OK=200
 CONFIG_status="/tmp/${CONFIG_script}.inf"  # Status file
@@ -205,34 +207,49 @@ write_thingsboard () {
 	then
 		reqdata="{${reqdata}}" # Create JSON object
 	else
-		echo_text -${CONST_level_verbose_info} "${msg}${sep}no payload. Exiting."
-		fatal_error "${msg} failed with no payload."
-fi
-	# Compose HTTP request
-	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)${sep}${reqdata}"
+		result="no payload"
+		echo_text -${CONST_level_verbose_info} "${msg}${sep}${result}. Exiting."
+		if [ -n "${CONFIG_status}" ]
+		then
+			echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
+		fi
+		fatal_error "${msg} failed with ${result}."
+	fi
+	# Process HTTP request
+	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)${sep}${reqdata}${sep}"
 	if [[ $CONFIG_flag_dryrun -eq 0 && -n "${reqdata}" ]]
 	then
-		CONFIG_thingsboard_code=$(curl --location --silent \
+		# Compose and send HTTP request
+		for (( i=0; i<${CONFIG_thingsboard_fail_count}; i++))
+		do
+			CONFIG_thingsboard_code=$(curl --location --silent \
 --write-out %{http_code} \
 --output /dev/null \
 --connect-timeout 3 \
 --request POST "${CONFIG_thingsboard_host}/api/v1/${CONFIG_thingsboard_token}/telemetry" \
 --header "Content-Type: application/json" \
 --data-raw "${reqdata}")
+			if [[ ${CONFIG_thingsboard_code} -eq ${CONFIG_thingsboard_code_OK}
+			   || ${CONFIG_thingsboard_code} -eq 0 ]]
+			then
+				break
+			fi
+			sleep ${CONFIG_thingsboard_fail_delay}
+		done
 	else
 		CONFIG_thingsboard_code=${CONFIG_thingsboard_code_OK}
 	fi
 	result="HTTP status code ${CONFIG_thingsboard_code}"
-	if [[ ${CONFIG_thingsboard_code} -ne ${CONFIG_thingsboard_code_OK} ]]
-	then
-		echo_text -${CONST_level_verbose_info} "${sep}failed with ${result}. Exiting."
-		fatal_error "${msg} failed with ${result}."
-	else
-		echo_text -${CONST_level_verbose_info} "${sep}${result}"
-	fi
 	if [ -n "${CONFIG_status}" ]
 	then
 		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
+	fi
+	if [[ ${CONFIG_thingsboard_code} -ne ${CONFIG_thingsboard_code_OK} ]]
+	then
+		echo_text -${CONST_level_verbose_info} "failed with ${result}. Exiting."
+		fatal_error "${msg} failed with ${result}."
+	else
+		echo_text -${CONST_level_verbose_info} "${CONFIG_thingsboard_code}."
 	fi
 }
 # <- END _functions
@@ -275,7 +292,7 @@ trap stop_script EXIT
 
 if [ -n "${CONFIG_status}" ]
 then
-	echo_text -s -${CONST_level_verbose_info} "Writing to status file ... '${CONFIG_status}'."
+	echo_text -h -${CONST_level_verbose_info} "Writing to status file ... '${CONFIG_status}'."
 	echo "" > "${CONFIG_status}"
 fi
 
