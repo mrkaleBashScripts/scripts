@@ -21,22 +21,32 @@
 #   them to be revealed by cron in email messages as a subject.
 #
 # OPTIONS:
-#   -h
-#       Help. Show usage description and exit.
-#   -s
-#       Simmulation. Perform dry run without sending to IoT platform.
-#   -V
-#       Version. Show version and copyright information and exit.
-#   -c
-#       Configs. Print listing of all configuration parameters.
-#   -o
-#       Output. Level of verbose intensity.
+#   -h  Help
+#       Show usage description and exit.
+#
+#   -s  Simmulation
+#       Perform dry run without sending to IoT platform.
+#
+#   -V  Version
+#       Show version and copyright information and exit.
+#
+#   -c  Configs
+#       Print listing of all configuration parameters.
+#
+#   -l  LoggingLevel
+#       Logging. Level of logging intensity to syslog
+#       0=none, 1=errors (default), 2=warnings, 3=info, 4=full
+#
+#   -o  Output
+#       Level of verbose intensity.
 #       0=none, 1=errors, 2=mails, 3=info (default), 4=functions, 5=full
-#   -m
-#       Mailing. Display processing messages suitable for emailing from cron.
+#
+#   -m  Mailing
+#       Display processing messages suitable for emailing from cron.
 #       It is an alias for '-o2'.
-#   -v
-#       Verbose. Display all processing messages.
+#
+#   -v  Verbose
+#       Display all processing messages.
 #       It is an alias for '-o5'.
 #
 #   -f  ConfigFile
@@ -46,7 +56,7 @@
 #       Credentials file with access permissions for overriding default
 #       configuration parameters.
 #
-#   -t StatusFile
+#   -t  StatusFile
 #       Tick file for writing working status of the script.
 #       Should be located in temporary file system.
 #
@@ -87,7 +97,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.3.0"
+CONFIG_version="0.4.0"
 CONFIG_commands=('grep') # Array of generally needed commands
 CONFIG_commands_run=('curl') # List of commands for full running
 CONFIG_level_logging=0  # No logging
@@ -131,7 +141,7 @@ show_help () {
 	echo "${CONFIG_script} [OPTION [ARG]]"
 	echo "
 Check electrical mains power supply status and send it to ThinsBoard IoT platform.
-$(process_help -b)
+$(process_help -o)
   -1 pretend (force) mains power supply
   -2 pretend (force) battery power supply
 $(process_help -f)
@@ -152,7 +162,6 @@ stop_script () {
 # @deps:  Overloaded library function
 check_mains () {
 	msg="Checking mains power supply status"
-	sep=" ... "
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
 	# Dry run simulation
 	if [[ ${CONFIG_flag_force_mains} -eq 1 ]]
@@ -176,6 +185,7 @@ check_mains () {
 		fi
 	fi
 	echo_text -${CONST_level_verbose_info} "${CONFIG_mains_status}."
+	log_text -IS "${msg}${sep}${CONFIG_mains_status}"
 	if [ -n "${CONFIG_status}" ]
 	then
 		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_mains_status}." >> "${CONFIG_status}"
@@ -198,17 +208,18 @@ write_thingsboard () {
 	fi
 	if [ -n "${reqdata}" ]
 	then
-		reqdata="\"powerSupply\": ${reqdata}"
+		reqdata="\"powerSupply\": ${reqdata},"
 	fi
 	# Process request payload
 	msg="Sending to ThingsBoard"
-	sep=" ... "
 	if [ -n "${reqdata}" ]
 	then
+		reqdata=${reqdata::-1}
 		reqdata="{${reqdata}}" # Create JSON object
 	else
 		result="no payload"
 		echo_text -${CONST_level_verbose_info} "${msg}${sep}${result}. Exiting."
+		log_text -FS "${msg}${sep}${result}"
 		if [ -n "${CONFIG_status}" ]
 		then
 			echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
@@ -247,9 +258,11 @@ write_thingsboard () {
 	if [[ ${CONFIG_thingsboard_code} -ne ${CONFIG_thingsboard_code_OK} ]]
 	then
 		echo_text -${CONST_level_verbose_info} "failed with ${result}. Exiting."
+		log_text -FS "${msg}${sep}${result}"
 		fatal_error "${msg} failed with ${result}."
 	else
 		echo_text -${CONST_level_verbose_info} "${CONFIG_thingsboard_code}."
+		log_text -IS "${msg}${sep}${result}"
 	fi
 }
 # <- END _functions

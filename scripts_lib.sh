@@ -29,7 +29,7 @@ fi
 # -> BEGIN Library configs
 LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.7.1"
+LIB_version="0.8.0"
 # Process default options
 # LIB_options_exclude=( 't' ) # Put such a line in a main script at the very begining of it
 LIB_options=":hsVcmvo:l:f:p:t:"
@@ -77,6 +77,8 @@ CONST_level_verbose_full=5
 CONST_level_verbose_min=${CONST_level_verbose_none}
 CONST_level_verbose_max=${CONST_level_verbose_full}
 CONST_level_verbose_dft=${CONFIG_level_verbose}
+
+sep=" ... "
 # <- END _constants
 
 
@@ -260,7 +262,7 @@ echo_text () {
   fi
 }
 
-# @info:  Log text to syslog user.log
+# @info:  Log text to syslog
 # @opts:
 #    -S|I|W|E|F ... prefixes
 #    -0 ~ -9 ... Logging levels
@@ -284,7 +286,7 @@ log_text () {
   if [[ $CONFIG_level_logging -ge $level ]]
   then
     shift $(($OPTIND-1))
-    echo_text -f -${CONST_level_verbose_function} "Logging to syslog 'user.log' ... $(prefix_token -N)::$prefix$@"
+    echo_text -f -${CONST_level_verbose_function} "Logging to syslog ... $(prefix_token -N)::$prefix$@"
     logger -t "$(prefix_token -N)" "$prefix$@"
   fi
 }

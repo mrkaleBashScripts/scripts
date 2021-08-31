@@ -36,22 +36,32 @@
 #   internet connection is restored even if it might be useless.
 #
 # OPTIONS:
-#   -h
-#       Help. Show usage description and exit.
-#   -s
-#       Simmulation. Perform dry run without sending to IoT platform.
-#   -V
-#       Version. Show version and copyright information and exit.
-#   -c
-#       Configs. Print listing of all configuration parameters.
-#   -o
-#       Output. Level of verbose intensity.
+#   -h  Help
+#       Show usage description and exit.
+#
+#   -s  Simmulation
+#       Perform dry run without sending to IoT platform.
+#
+#   -V  Version
+#       Show version and copyright information and exit.
+#
+#   -c  Configs
+#       Print listing of all configuration parameters.
+#
+#   -l  LoggingLevel
+#       Logging. Level of logging intensity to syslog
+#       0=none, 1=errors (default), 2=warnings, 3=info, 4=full
+#
+#   -o  Output
+#       Level of verbose intensity.
 #       0=none, 1=errors, 2=mails, 3=info (default), 4=functions, 5=full
-#   -m
-#       Mailing. Display processing messages suitable for emailing from cron.
+#
+#   -m  Mailing
+#       Display processing messages suitable for emailing from cron.
 #       It is an alias for '-o2'.
-#   -v
-#       Verbose. Display all processing messages.
+#
+#   -v  Verbose
+#       Display all processing messages.
 #       It is an alias for '-o5'.
 #
 #   -f  ConfigFile
@@ -61,7 +71,7 @@
 #       Credentials file with access permissions for overriding default
 #       configuration parameters.
 #
-#   -t StatusFile
+#   -t  StatusFile
 #       Tick file for writing working status of the script.
 #       Should be located in temporary file system.
 #
@@ -107,7 +117,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.4.0"
+CONFIG_version="0.5.0"
 CONFIG_commands=('grep' 'ping' 'xxd') # Array of generally needed commands
 CONFIG_commands_run=('curl') # List of commands for full running
 CONFIG_level_logging=0  # No logging
@@ -144,7 +154,7 @@ show_help () {
 Check internet connection status and send it to ThinsBoard IoT platform.
 Temporarily turn off the ICSE relay for rebooting a router after a couple of
 running periods.
-$(process_help -b)
+$(process_help -o)
   -1 pretend (force) correct connection
   -2 pretend (force) failed connection
 
@@ -192,7 +202,7 @@ stop_script () {
 # @deps:  Overloaded library function
 check_inet () {
 	msg="Checking internet connection status"
-	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token) ... "
+	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
 	# Dry run simulation
 	if [[ ${CONFIG_flag_force_inet} -eq 1 ]]
 	then
@@ -215,9 +225,10 @@ check_inet () {
 		fi
 	fi
 	echo_text -${CONST_level_verbose_info} "${CONFIG_inet_status}."
+	log_text -IS "${msg}${sep}${CONFIG_inet_status}"
 	if [ -n "${CONFIG_status}" ]
 	then
-		echo_text -ISL -${CONST_level_verbose_none} "${msg} ... ${CONFIG_inet_status}." >> "${CONFIG_status}"
+		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_inet_status}." >> "${CONFIG_status}"
 	fi
 }
 
@@ -226,7 +237,6 @@ check_inet () {
 # @deps: CONFIG_* variables
 relay_toggle () {
 	msg="Toggling relay '${CONFIG_icse_file}'"
-	sep=" ... "
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)"
 	if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
 	then
@@ -245,6 +255,7 @@ relay_toggle () {
 	echo_text -${CONST_level_verbose_info} "${result}"
 	LOG_period=${CONFIG_log_count}
 	LOG_toggle=1
+	log_text -IS "${msg}${result}"
 	if [ -n "${CONFIG_status}" ]
 	then
 		echo_text -ISL -${CONST_level_verbose_none} "${msg}${result}" >> "${CONFIG_status}"
@@ -258,7 +269,7 @@ relay_control () {
 	if [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
 	then
 		((LOG_period--))
-		echo_text -h -${CONST_level_verbose_info} "Countdown ... Inet ${CONFIG_inet_status}, Relay ${LOG_relay}, Period ${LOG_period}"
+		echo_text -h -${CONST_level_verbose_info} "Countdown${sep}Inet ${CONFIG_inet_status}, Relay ${LOG_relay}, Period ${LOG_period}"
 		if [[ ${LOG_period} -le 0 ]]
 		then
 			relay_toggle
@@ -310,7 +321,6 @@ write_thingsboard () {
 	fi
 	# Process request payload
 	msg="Sending to ThingsBoard"
-	sep=" ... "
 	if [ -n "${reqdata}" ]
 	then
 		reqdata=${reqdata::-1}
@@ -318,6 +328,7 @@ write_thingsboard () {
 	else
 		result="no payload"
 		echo_text -${CONST_level_verbose_info} "${msg}${sep}${result}. Exiting."
+		log_text -FS "${msg}${sep}${result}"
 		if [ -n "${CONFIG_status}" ]
 		then
 			echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
@@ -356,9 +367,11 @@ write_thingsboard () {
 	if [[ ${CONFIG_thingsboard_code} -ne ${CONFIG_thingsboard_code_OK} ]]
 	then
 		echo_text -${CONST_level_verbose_info} "failed with ${result}. Exiting."
+		log_text -FS "${msg}${sep}${result}"
 		fatal_error "${msg} failed with ${result}."
 	else
 		echo_text -${CONST_level_verbose_info} "${CONFIG_thingsboard_code}."
+		log_text -IS "${msg}${sep}${result}"
 	fi
 }
 # <- END _functions
@@ -425,7 +438,7 @@ fi
 
 if [ -n "${CONFIG_status}" ]
 then
-	echo_text -h -${CONST_level_verbose_info} "Writing to status file ... '${CONFIG_status}'."
+	echo_text -h -${CONST_level_verbose_info} "Writing to status file${sep}'${CONFIG_status}'."
 	echo "" > "${CONFIG_status}"
 fi
 
