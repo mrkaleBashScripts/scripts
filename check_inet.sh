@@ -117,9 +117,9 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.5.0"
-CONFIG_commands=('grep' 'ping' 'xxd') # Array of generally needed commands
-CONFIG_commands_run=('curl') # List of commands for full running
+CONFIG_version="0.6.0"
+CONFIG_commands=('grep' 'ping') # Array of generally needed commands
+CONFIG_commands_run=('curl' 'xxd') # List of commands for full running
 CONFIG_level_logging=0  # No logging
 CONFIG_flag_root=1	# Check root privileges flag
 CONFIG_flag_force_inet=0
@@ -274,6 +274,10 @@ relay_control () {
 		then
 			relay_toggle
 		fi
+	elif [[ "${CONFIG_inet_status}" == "${CONFIG_active}"
+			 && "${LOG_relay}" == "${CONFIG_idle}" ]]
+	then
+		relay_toggle
 	fi
 }
 
