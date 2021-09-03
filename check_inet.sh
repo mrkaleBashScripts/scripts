@@ -117,7 +117,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.6.0"
+CONFIG_version="0.6.1"
 CONFIG_commands=('grep' 'ping') # Array of generally needed commands
 CONFIG_commands_run=('curl' 'xxd') # List of commands for full running
 CONFIG_level_logging=0  # No logging
@@ -225,7 +225,12 @@ check_inet () {
 		fi
 	fi
 	echo_text -${CONST_level_verbose_info} "${CONFIG_inet_status}."
-	log_text -IS "${msg}${sep}${CONFIG_inet_status}"
+	period=""
+	if [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
+	then
+		period=" ($((${CONFIG_log_count}-${LOG_period}+1)))"
+	fi
+	log_text -IS "${msg}${period}${sep}${CONFIG_inet_status}"
 	if [ -n "${CONFIG_status}" ]
 	then
 		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_inet_status}." >> "${CONFIG_status}"
