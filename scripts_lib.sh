@@ -29,9 +29,9 @@ fi
 # -> BEGIN Library configs
 LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.8.0"
+LIB_version="0.9.0"
 # Process default options
-# LIB_options_exclude=( 't' ) # Put such a line in a main script at the very begining of it
+# LIB_options_exclude=('t' 'l') # List of omitted options at the very begining of script
 LIB_options=":hsVcmvo:l:f:p:t:"
 for opt in ${LIB_options_exclude[@]}
 do
@@ -662,7 +662,7 @@ process_folder () {
 # @args:  none
 # @return:  none
 # @deps:  none
-help="See help by '$CONFIG_script -h' please!"
+help="See help by '${CONFIG_script} -h' please!"
 process_options () {
   local OPTIND opt
   while getopts "${LIB_options}" opt
@@ -742,10 +742,9 @@ process_options () {
   done
 }
 
-# @info:  Create common help texts
+# @info:  Create common help texts. Unwished options put to array in 'LIB_options_exclude'
 # @opts:
-#    -b ... text for basic options
-#    -o ... text for all options
+#    -o ... text for options
 #    -f ... text for footer
 # @args:  none
 # @return:  text for help
@@ -757,7 +756,7 @@ process_help () {
   while getopts ":bof" opt
   do
     case "$opt" in
-    b)
+    o)
       help="
 Options and arguments:
 "
@@ -793,6 +792,12 @@ Options and arguments:
         help+="
   -v verbose: display all processing messages; alias for '-o${CONST_level_verbose_max}'"
       fi
+      if [[ $LIB_options == *l* ]]
+      then
+        help+="  -l log_level
+     logging: level of logging intensity to syslog
+     0=none, 1=errors, 2=warnings, 3=info, 4=full (default ${CONFIG_level_logging})"
+      fi
       if [[ $LIB_options == *s* ]]
       then
         help+="
@@ -813,15 +818,6 @@ Options and arguments:
         help+="
   -t status_file
      tick: file for writing working status"
-      fi
-      ;;
-    o)
-      ${FUNCNAME[0]} -b
-      if [[ $LIB_options == *l* ]]
-      then
-        help+="  -l log_level
-     logging: level of logging intensity to syslog
-     0=none, 1=errors, 2=warnings, 3=info, 4=full (default ${CONFIG_level_logging})"
       fi
       ;;
     f)
