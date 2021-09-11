@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
 # NAME:
-#   check_inet.sh - Check status of internet connection
+#   check_camera.sh - Check status of security cameras
 #
 # SYNOPSIS:
-#   check_inet.sh [OPTION [ARG]] ICSE_devfile [log_file]
+#   check_camera.sh [OPTION [ARG]]
 #
 # DESCRIPTION:
-# Script checks if the local server has connection to the internet, i.e.,
-# the router is functional and sends its status to ThingsBoard IoT platform
+# Script checks if the security IP cameras have connection to the router, i.e.,
+# to the wifi network and sends their status to ThingsBoard IoT platform
 # for processing alarms.
 # - Script has to be run under root privileges (sudo ...).
 # - Script is supposed to run under cron.
@@ -21,19 +21,8 @@
 # - For security reasons the credentials to IoT platform should be written
 #   only in credentials file. Putting them to a command line does not prevent
 #   them to be revealed by cron in email messages as a subject.
-# - The script controls the USB relay board ICSE013A with 2 relays both at once.
-# - One of relay supplies the internet router and work in oposite order, i.e.,
-#   Normally Closed ports are utilized and relay supplies in OFF state.
-# - At detection internet outage, the script starts countdown and executes itself
-#   3 times. If there is still outage, the script turns the relay ON, which means
-#   switching OFF the router. In this state the script starts new countdown
-#   and executes itself 3 times as a waiting period for discharching the router.
-#   Then the script turns the relay OFF again, which connects mains to the router
-#   and starts the entire process again. If the internet connection is restored
-#   during that process, the script waits to another internet outage for rebooting
-#   router again.
-# - Entire process with turning ON and OFF the relays is repeated until the
-#   internet connection is restored even if it might be useless.
+# - At camera connection outage or restoration the script sends the status just
+#   once right after a change of connection status.
 #
 # OPTIONS:
 #   -h  Help
@@ -75,16 +64,13 @@
 #       Tick file for writing working status of the script.
 #       Should be located in temporary file system.
 #
-#   -1  Force internet connection
-#       Pretend functional internet.
+#   -1  Force all camera connection
+#       Pretend functional wifi connection to all cameras.
 #
 #   -2  Force no connection
-#       Pretend broken internet connection.
+#       Pretend broken wifi connection of all cameras.
 #
-# ARGS:
-#   ICSE_devfile  Device file of a relay board in '/dev' folder
-#   log_file      Alternative log file to default one for persisting working
-#                 variables
+# ARGS: None
 #
 # LICENSE:
 # This program is free software; you can redistribute it and/or modify
@@ -117,27 +103,27 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.6.1"
+CONFIG_version="0.1.0"
 CONFIG_commands=('grep' 'ping') # Array of generally needed commands
-CONFIG_commands_run=('curl' 'xxd') # List of commands for full running
+CONFIG_commands_run=('curl') # List of commands for full running
 CONFIG_level_logging=0  # No logging
 CONFIG_flag_root=1	# Check root privileges flag
-CONFIG_flag_force_inet=0
+CONFIG_flag_force_active=0
 CONFIG_flag_force_idle=0
-CONFIG_inet_ip="8.8.4.4"	# External test IP address of Google, inc.
 CONFIG_active="ON"
 CONFIG_idle="OFF"
-CONFIG_inet_status=""
 CONFIG_thingsboard_host=""
 CONFIG_thingsboard_token=""
 CONFIG_thingsboard_fail_count=3 # HTTP request retries
 CONFIG_thingsboard_fail_delay=5 # Retry seconds for another HTTP request
 CONFIG_thingsboard_code=0
 CONFIG_thingsboard_code_OK=200
-CONFIG_icse_file=""	# Device file of the relay board
-CONFIG_log_file="/tmp/${CONFIG_script}.dat"	# Persistent log file
-CONFIG_log_count=3	# Count-down periods
 CONFIG_status="/tmp/${CONFIG_script}.inf"  # Status file
+# Cameras
+CONFIG_camera_front_ip=""
+CONFIG_camera_front_status=""
+CONFIG_camera_back_ip=""
+CONFIG_camera_back_status=""
 # <- END _config
 
 
@@ -149,17 +135,13 @@ CONFIG_status="/tmp/${CONFIG_script}.inf"  # Status file
 # @deps: none
 show_help () {
 	echo
-	echo "${CONFIG_script} [OPTION [ARG]] ICSE_devfile [log_file]"
+	echo "${CONFIG_script} [OPTION [ARG]]"
 	echo "
-Check internet connection status and send it to ThinsBoard IoT platform.
-Temporarily turn off the ICSE relay for rebooting a router after a couple of
-running periods.
+Check wifi connection status of all security IP cameras and send them
+to ThinsBoard IoT platform.
 $(process_help -o)
-  -1 pretend (force) correct connection
-  -2 pretend (force) failed connection
-
-  ICSE_devfile: device file of a relay board in '/dev' folder
-  log_file: alternative log file to default one for persisting working variables
+  -1 pretend (force) correct connection of all cameras
+  -2 pretend (force) failed connection of all cameras
 $(process_help -f)
 "
 }
@@ -168,23 +150,8 @@ $(process_help -f)
 # @return: LOG_* variables
 # @deps: CONFIG_* variables
 init_logvars () {
-	LOG_relay=${CONFIG_active}
-	LOG_period=${CONFIG_log_count}
-	LOG_toggle=0
-}
-
-# @info: Save log variables to log file
-# @args: none
-# @return: none
-# @deps: LOG_* variables
-save_logvars () {
-	if [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
-	then
-		set | grep "^LOG_" > "${CONFIG_log_file}"
-	elif [[ -f "${CONFIG_log_file}" ]]
-	then
-		rm "${CONFIG_log_file}"
-	fi
+	LOG_camera_front=${CONFIG_active}
+	LOG_camera_back=${CONFIG_active}
 }
 
 # @info: Actions at finishing script invoked by 'trap'
@@ -192,141 +159,120 @@ save_logvars () {
 # @return: none
 # @deps: Overloaded library function
 stop_script () {
-	save_logvars
 	show_manifest STOP
 }
 
-# @info:  Checking internet connection
+# @info:  Checking front camera wifi connection
 # @args:  none
 # @return: global config variable
 # @deps:  none
-check_inet () {
-	msg="Checking internet connection status"
+check_camera_front () {
+	msg="Checking front camera status"
+	camera_ip=${CONFIG_camera_front_ip}
+  camera_status=${CONFIG_idle}
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
 	# Dry run simulation
-	if [[ ${CONFIG_flag_force_inet} -eq 1 ]]
+	if [[ ${CONFIG_flag_force_active} -eq 1 ]]
 	then
-		CONFIG_inet_status=${CONFIG_active}
+		camera_status=${CONFIG_active}
 	elif [[ ${CONFIG_flag_force_idle} -eq 1 ]]
 	then
-		CONFIG_inet_status=${CONFIG_idle}
-	# Check connection to internet
+		camera_status=${CONFIG_idle}
+	# Check connection to wifi
 	else
-		TestIP=${CONFIG_inet_ip}
+		TestIP=${camera_ip}
 		if [ -n "${TestIP}" ]
 		then
 			ping -c1 -w5 ${TestIP} >/dev/null
 			if [ $? -eq 0 ]
 			then
-				CONFIG_inet_status=${CONFIG_active}
+				camera_status=${CONFIG_active}
 			else
-				CONFIG_inet_status=${CONFIG_idle}
+				camera_status=${CONFIG_idle}
 			fi
 		fi
 	fi
-	echo_text -${CONST_level_verbose_info} "${CONFIG_inet_status}."
-	period=""
-	if [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
-	then
-		period=" ($((${CONFIG_log_count}-${LOG_period}+1)))"
-	fi
-	log_text -IS "${msg}${period}${sep}${CONFIG_inet_status}"
+	echo_text -${CONST_level_verbose_info} "${camera_status}."
+	log_text -IS "${msg}${sep}${camera_status}"
 	if [ -n "${CONFIG_status}" ]
 	then
-		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_inet_status}." >> "${CONFIG_status}"
+		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${camera_status}." >> "${CONFIG_status}"
 	fi
+	CONFIG_camera_front_status=${camera_status}
 }
 
-# @info: Toggle relay
-# @return: LOG_* variables
-# @deps: CONFIG_* variables
-relay_toggle () {
-	msg="Toggling relay '${CONFIG_icse_file}'"
-	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)"
-	if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
+# @info:  Checking back camera wifi connection
+# @args:  none
+# @return: global config variable
+# @deps:  none
+check_camera_back () {
+	msg="Checking back camera status"
+	camera_ip=${CONFIG_camera_back_ip}
+  camera_status=${CONFIG_idle}
+	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
+	# Dry run simulation
+	if [[ ${CONFIG_flag_force_active} -eq 1 ]]
 	then
-		# Control both relays on the board at once
-		control_byte="03"
-		LOG_relay=${CONFIG_idle}
+		camera_status=${CONFIG_active}
+	elif [[ ${CONFIG_flag_force_idle} -eq 1 ]]
+	then
+		camera_status=${CONFIG_idle}
+	# Check connection to wifi
 	else
-		control_byte="00"
-		LOG_relay=${CONFIG_active}
+		TestIP=${camera_ip}
+		if [ -n "${TestIP}" ]
+		then
+			ping -c1 -w5 ${TestIP} >/dev/null
+			if [ $? -eq 0 ]
+			then
+				camera_status=${CONFIG_active}
+			else
+				camera_status=${CONFIG_idle}
+			fi
+		fi
 	fi
-	if [[ $CONFIG_flag_dryrun -eq 0 ]]
-	then
-		echo "${control_byte}" | xxd -r -p > ${CONFIG_icse_file}
-	fi
-	result="${sep}to ${LOG_relay} by ${control_byte}."
-	echo_text -${CONST_level_verbose_info} "${result}"
-	LOG_period=${CONFIG_log_count}
-	LOG_toggle=1
-	log_text -IS "${msg}${result}"
+	echo_text -${CONST_level_verbose_info} "${camera_status}."
+	log_text -IS "${msg}${sep}${camera_status}"
 	if [ -n "${CONFIG_status}" ]
 	then
-		echo_text -ISL -${CONST_level_verbose_none} "${msg}${result}" >> "${CONFIG_status}"
+		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${camera_status}." >> "${CONFIG_status}"
 	fi
-}
-
-# @info: Toggle relay
-# @return: LOG_* variables
-# @deps: CONFIG_* variables
-relay_control () {
-	if [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
-	then
-		((LOG_period--))
-		echo_text -h -${CONST_level_verbose_info} "Countdown${sep}Inet ${CONFIG_inet_status}, Relay ${LOG_relay}, Period ${LOG_period}"
-		if [[ ${LOG_period} -le 0 ]]
-		then
-			relay_toggle
-		fi
-	elif [[ "${CONFIG_inet_status}" == "${CONFIG_active}"
-			 && "${LOG_relay}" == "${CONFIG_idle}" ]]
-	then
-		relay_toggle
-	fi
+	CONFIG_camera_back_status=${camera_status}
 }
 
 # @info:  Send data to ThingsBoard IoT platform
 # @args:  none
 # @return: global CONFIG_thingsboard_code variable
-# @deps:  global CONFIG_inet variables
+# @deps:  global CONFIG_camera variables
 write_thingsboard () {
-	local reqdata inet relay
-	# Compose data item for internet connection status
-	if [[ "${CONFIG_inet_status}" == "${CONFIG_active}" ]]
+	local reqdata camera_front camera_back
+	# Compose data item for front camera
+	if [[ "${CONFIG_camera_front_status}" == "${CONFIG_active}" ]]
 	then
-		inet="true"
-		if [ -f "${CONFIG_log_file}" ]
-		then
-			relay="true"
-		fi
-	elif [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
+		camera_front="true"
+	elif [[ "${CONFIG_camera_front_status}" == "${CONFIG_idle}" ]]
 	then
-		inet="false"
+		camera_front="false"
 	else
-		inet=""
+		camera_front=""
 	fi
-	if [ -n "${inet}" ]
+	if [ -n "${camera_front}" ]
 	then
-		reqdata="${reqdata}\"inetConnect\":${inet},"
+		reqdata="${reqdata}\"cameraFront\":${camera_front},"
 	fi
-	# Compose data item for relay toggling
-	if [[ ${LOG_toggle} -eq 1 ]]
+	# Compose data item for back camera
+	if [[ "${CONFIG_camera_back_status}" == "${CONFIG_active}" ]]
 	then
-		if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
-		then
-			relay="true"
-		elif [[ "${LOG_relay}" == "${CONFIG_idle}" ]]
-		then
-			relay="false"
-		else
-			relay=""
-		fi
-		LOG_toggle=0
+		camera_back="true"
+	elif [[ "${CONFIG_camera_back_status}" == "${CONFIG_idle}" ]]
+	then
+		camera_back="false"
+	else
+		camera_back=""
 	fi
-	if [ -n "${relay}" ]
+	if [ -n "${camera_back}" ]
 	then
-		reqdata="${reqdata}\"inetRelay\":${relay},"
+		reqdata="${reqdata}\"cameraBack\":${camera_back},"
 	fi
 	# Process request payload
 	msg="Sending to ThingsBoard"
@@ -392,7 +338,7 @@ while getopts "${LIB_options}12" opt
 do
 	case "$opt" in
 	1)
-		CONFIG_flag_force_inet=1
+		CONFIG_flag_force_active=1
 		CONFIG_flag_force=1
 		;;
 	2)
@@ -413,24 +359,9 @@ do
 	esac
 done
 
-# Process non-option arguments
-shift $(($OPTIND-1))
-# Relay device file
-if [ -n "$1" ]
-then
-	CONFIG_icse_file="$1"
-fi
-# Log file
-if [ -n "$2" ]
-then
-	CONFIG_log_file="$2"
-fi
-
 init_script
 show_configs
 
-process_folder -t "ICSE '/dev'" -fe "${CONFIG_icse_file}"
-process_folder -t "Log" -cfe "${CONFIG_log_file}"
 process_folder -t "Status" -f "${CONFIG_status}"
 
 # -> Script execution
@@ -439,20 +370,14 @@ trap stop_script EXIT
 # Initialize log variables
 init_logvars
 
-# Update log variables from log file
-if [ -s "${CONFIG_log_file}" ]
-then
-	source "${CONFIG_log_file}"
-fi
-
 if [ -n "${CONFIG_status}" ]
 then
 	echo_text -h -${CONST_level_verbose_info} "Writing to status file${sep}'${CONFIG_status}'."
 	echo "" > "${CONFIG_status}"
 fi
 
-check_inet
-relay_control
+check_camera_front
+check_camera_back
 write_thingsboard
 
 # End of script processed by TRAP
