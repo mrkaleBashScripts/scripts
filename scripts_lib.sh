@@ -913,7 +913,7 @@ init_script () {
 # @deps:  global CONFIG_inet variables
 write2thingsboard () {
   local payload msg resp
-  payload=$1
+  payload="$1"
   msg="HTTP request to ThingsBoard"
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)${sep}${payload}${sep}"
 	if [[ $CONFIG_flag_dryrun -eq 0 && -n "${payload}" ]]

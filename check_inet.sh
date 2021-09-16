@@ -338,7 +338,7 @@ write_thingsboard () {
 		fi
 		fatal_error "${msg} failed with ${result}."
 	fi
-	write2thingsboard ${reqdata}
+	write2thingsboard "${reqdata}"
 }
 # <- END _functions
 
