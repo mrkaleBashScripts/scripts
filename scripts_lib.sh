@@ -29,7 +29,7 @@ fi
 # -> BEGIN Library configs
 LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.9.0"
+LIB_version="0.10.0"
 # Process default options
 # LIB_options_exclude=('t' 'l') # List of omitted options at the very begining of script
 LIB_options=":hsVcmvo:l:f:p:t:"
@@ -56,6 +56,11 @@ CONFIG_flag_root=0  # Check root privileges flag
 CONFIG_config=""  # Configuration file
 CONFIG_credentials=""  # Credentials file
 CONFIG_status=""  # Status file
+CONFIG_thingsboard_host=""
+CONFIG_thingsboard_token=""
+CONFIG_thingsboard_fail_count=3 # HTTP request retries
+CONFIG_thingsboard_fail_delay=5 # Retry seconds for another HTTP request
+CONFIG_thingsboard_code_OK=200
 # <- END Common working configs
 
 # <- BEGIN _constants
@@ -311,7 +316,7 @@ status_text () {
   then
     shift $(($OPTIND-1))
     echo_text -f -${CONST_level_verbose_function} "Writing to status file '$CONFIG_status' ... $1"
-    if [[ $flag_append -eq  0 && -f "${CONFIG_status}" ]]
+    if [[ $flag_append -eq 0 && -f "${CONFIG_status}" ]]
     then
       rm "$CONFIG_status" >/dev/null
     fi
@@ -320,11 +325,25 @@ status_text () {
 }
 
 # @info:  Print error text to standard error output, log it to syslog and exit script
-# @args:  Error message & Arguments
+# @opts:
+#    -s ... Silent. Do not echo text, just log.
 # @return:  exit 1
 # @deps:  echo_text, log_text
 fatal_error () {
-  echo_text -e  -${CONST_level_verbose_error} "$@"
+  local OPTIND opt
+  local flag_silent=0
+  while getopts ":s" opt
+  do
+    case "$opt" in
+    s)
+      flag_silent=1
+      ;;
+    esac
+  done
+  if [[ $flag_silent -eq 0 ]]
+  then
+    echo_text -e  -${CONST_level_verbose_error} "$@"
+  fi
   log_text  -ES -$CONST_level_logging_error "$@"
   exit 1
 }
@@ -887,4 +906,55 @@ init_script () {
   check_root
 }
 
+# @info:  Send data to ThingsBoard IoT platform
+# @args:
+#   $1 ... HTTP request payload as JSON object
+# @return: none
+# @deps:  global CONFIG_inet variables
+write2thingsboard () {
+  local payload msg resp
+  payload=$1
+  msg="HTTP request to ThingsBoard"
+	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)${sep}${payload}${sep}"
+	if [[ $CONFIG_flag_dryrun -eq 0 && -n "${payload}" ]]
+	then
+		# Compose and send HTTP request
+		for (( i=0; i<${CONFIG_thingsboard_fail_count}; i++))
+		do
+			resp=$(curl --location --silent \
+--write-out %{http_code} \
+--output /dev/null \
+--connect-timeout 3 \
+--request POST "${CONFIG_thingsboard_host}/api/v1/${CONFIG_thingsboard_token}/telemetry" \
+--header "Content-Type: application/json" \
+--data-raw "${payload}")
+			if [[ ${resp} -eq ${CONFIG_thingsboard_code_OK} || ${resp} -eq 0 ]]
+			then
+				break
+			fi
+			sleep ${CONFIG_thingsboard_fail_delay}
+		done
+	else
+		resp=${CONFIG_thingsboard_code_OK}
+	fi
+	result="HTTP status code ${resp}"
+	if [ -n "${CONFIG_status}" ]
+	then
+		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
+	fi
+	if [[ ${resp} -ne ${CONFIG_thingsboard_code_OK} ]]
+	then
+		echo_text -${CONST_level_verbose_info} "failed with ${result}. Exiting."
+		log_text -FS "${msg}${sep}${result}"
+		opt=""
+		if [[ ${resp} -eq 0 ]]
+		then
+			opt="-s"
+		fi
+		fatal_error ${opt} "${msg} failed with ${result}."
+	else
+		echo_text -${CONST_level_verbose_info} "${resp}."
+		log_text -IS "${msg}${sep}${result}"
+	fi
+}
 # <- END _functions

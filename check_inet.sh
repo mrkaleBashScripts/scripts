@@ -117,7 +117,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.6.1"
+CONFIG_version="0.7.0"
 CONFIG_commands=('grep' 'ping') # Array of generally needed commands
 CONFIG_commands_run=('curl' 'xxd') # List of commands for full running
 CONFIG_level_logging=0  # No logging
@@ -128,12 +128,6 @@ CONFIG_inet_ip="8.8.4.4"	# External test IP address of Google, inc.
 CONFIG_active="ON"
 CONFIG_idle="OFF"
 CONFIG_inet_status=""
-CONFIG_thingsboard_host=""
-CONFIG_thingsboard_token=""
-CONFIG_thingsboard_fail_count=3 # HTTP request retries
-CONFIG_thingsboard_fail_delay=5 # Retry seconds for another HTTP request
-CONFIG_thingsboard_code=0
-CONFIG_thingsboard_code_OK=200
 CONFIG_icse_file=""	# Device file of the relay board
 CONFIG_log_file="/tmp/${CONFIG_script}.dat"	# Persistent log file
 CONFIG_log_count=3	# Count-down periods
@@ -344,44 +338,7 @@ write_thingsboard () {
 		fi
 		fatal_error "${msg} failed with ${result}."
 	fi
-	# Process HTTP request
-	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)${sep}${reqdata}${sep}"
-	if [[ $CONFIG_flag_dryrun -eq 0 && -n "${reqdata}" ]]
-	then
-		# Compose and send HTTP request
-		for (( i=0; i<${CONFIG_thingsboard_fail_count}; i++))
-		do
-			CONFIG_thingsboard_code=$(curl --location --silent \
---write-out %{http_code} \
---output /dev/null \
---connect-timeout 3 \
---request POST "${CONFIG_thingsboard_host}/api/v1/${CONFIG_thingsboard_token}/telemetry" \
---header "Content-Type: application/json" \
---data-raw "${reqdata}")
-			if [[ ${CONFIG_thingsboard_code} -eq ${CONFIG_thingsboard_code_OK}
-			   || ${CONFIG_thingsboard_code} -eq 0 ]]
-			then
-				break
-			fi
-			sleep ${CONFIG_thingsboard_fail_delay}
-		done
-	else
-		CONFIG_thingsboard_code=${CONFIG_thingsboard_code_OK}
-	fi
-	result="HTTP status code ${CONFIG_thingsboard_code}"
-	if [ -n "${CONFIG_status}" ]
-	then
-		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
-	fi
-	if [[ ${CONFIG_thingsboard_code} -ne ${CONFIG_thingsboard_code_OK} ]]
-	then
-		echo_text -${CONST_level_verbose_info} "failed with ${result}. Exiting."
-		log_text -FS "${msg}${sep}${result}"
-		fatal_error "${msg} failed with ${result}."
-	else
-		echo_text -${CONST_level_verbose_info} "${CONFIG_thingsboard_code}."
-		log_text -IS "${msg}${sep}${result}"
-	fi
+	write2thingsboard ${reqdata}
 }
 # <- END _functions
 
