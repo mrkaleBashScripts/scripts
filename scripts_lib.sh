@@ -29,7 +29,7 @@ fi
 # -> BEGIN Library configs
 LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.10.0"
+LIB_version="0.11.0"
 # Process default options
 # LIB_options_exclude=('t' 'l') # List of omitted options at the very begining of script
 LIB_options=":hsVcmvo:l:f:p:t:"
@@ -276,7 +276,7 @@ echo_text () {
 log_text () {
   local OPTIND opt
   local prefix=""
-  local level=$CONFIG_level_logging_dft
+  local level=${CONST_level_logging_dft}
   while getopts ":SIWEF01234" opt
   do
     case "$opt" in
@@ -288,7 +288,7 @@ log_text () {
       ;;
     esac
   done
-  if [[ $CONFIG_level_logging -ge $level ]]
+  if [[ ${CONFIG_level_logging} -ge ${level} ]]
   then
     shift $(($OPTIND-1))
     echo_text -f -${CONST_level_verbose_function} "Logging to syslog ... $(prefix_token -N)::$prefix$@"
@@ -326,7 +326,7 @@ status_text () {
 
 # @info:  Print error text to standard error output, log it to syslog and exit script
 # @opts:
-#    -s ... Silent. Do not echo text, just log.
+#    -s ... Silent. Do not echo text and retun zero exit code, just log.
 # @return:  exit 1
 # @deps:  echo_text, log_text
 fatal_error () {
@@ -340,12 +340,14 @@ fatal_error () {
       ;;
     esac
   done
+  log_text -FS -${CONST_level_logging_error} "$@"
   if [[ $flag_silent -eq 0 ]]
   then
-    echo_text -e  -${CONST_level_verbose_error} "$@"
+    echo_text -e -${CONST_level_verbose_error} "$@"
+    exit 1
+  else
+    exit 0
   fi
-  log_text  -ES -$CONST_level_logging_error "$@"
-  exit 1
 }
 
 # @info:  Display configuration parameters
@@ -945,7 +947,6 @@ write2thingsboard () {
 	if [[ ${resp} -ne ${CONFIG_thingsboard_code_OK} ]]
 	then
 		echo_text -${CONST_level_verbose_info} "failed with ${result}. Exiting."
-		log_text -FS "${msg}${sep}${result}"
 		opt=""
 		if [[ ${resp} -eq 0 ]]
 		then

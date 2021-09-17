@@ -103,10 +103,9 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.2.0"
+CONFIG_version="0.3.0"
 CONFIG_commands=('grep' 'ping') # Array of generally needed commands
 CONFIG_commands_run=('curl') # List of commands for full running
-CONFIG_level_logging=0  # No logging
 CONFIG_flag_root=1	# Check root privileges flag
 CONFIG_flag_force_active=0
 CONFIG_flag_force_idle=0
@@ -140,14 +139,6 @@ $(process_help -f)
 "
 }
 
-# @info: Intialize log variables
-# @return: LOG_* variables
-# @deps: CONFIG_* variables
-init_logvars () {
-	LOG_camera_front=${CONFIG_active}
-	LOG_camera_back=${CONFIG_active}
-}
-
 # @info: Actions at finishing script invoked by 'trap'
 # @args: none
 # @return: none
@@ -161,7 +152,7 @@ stop_script () {
 # @return: global config variable
 # @deps:  none
 check_camera_front () {
-	msg="Checking front camera status"
+	msg="Checking camera status${sep}front"
 	camera_ip=${CONFIG_camera_front_ip}
   camera_status=${CONFIG_idle}
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
@@ -200,7 +191,7 @@ check_camera_front () {
 # @return: global config variable
 # @deps:  none
 check_camera_back () {
-	msg="Checking back camera status"
+	msg="Checking camera status${sep}back"
 	camera_ip=${CONFIG_camera_back_ip}
   camera_status=${CONFIG_idle}
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
@@ -277,7 +268,6 @@ write_thingsboard () {
 	else
 		result="no payload"
 		echo_text -${CONST_level_verbose_info} "${msg}${sep}${result}. Exiting."
-		log_text -FS "${msg}${sep}${result}"
 		if [ -n "${CONFIG_status}" ]
 		then
 			echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
@@ -323,9 +313,6 @@ process_folder -t "Status" -f "${CONFIG_status}"
 
 # -> Script execution
 trap stop_script EXIT
-
-# Initialize log variables
-init_logvars
 
 if [ -n "${CONFIG_status}" ]
 then

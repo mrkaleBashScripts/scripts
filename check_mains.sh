@@ -97,10 +97,9 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.5.0"
+CONFIG_version="0.6.0"
 CONFIG_commands=('grep') # Array of generally needed commands
 CONFIG_commands_run=('curl') # List of commands for full running
-CONFIG_level_logging=0  # No logging
 CONFIG_flag_root=1	# Check root privileges flag
 CONFIG_flag_force_mains=0
 CONFIG_flag_force_batt=0
@@ -213,7 +212,6 @@ write_thingsboard () {
 	else
 		result="no payload"
 		echo_text -${CONST_level_verbose_info} "${msg}${sep}${result}. Exiting."
-		log_text -FS "${msg}${sep}${result}"
 		if [ -n "${CONFIG_status}" ]
 		then
 			echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
