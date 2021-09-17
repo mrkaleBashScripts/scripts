@@ -52,6 +52,10 @@
 #       Tick file for writing working status of the script.
 #       Should be located in temporary file system.
 #
+#   -1  Force success IP update
+#
+#   -2  Force failed IP update
+#
 # LICENSE:
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -84,10 +88,11 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.1.0"
+CONFIG_version="0.2.0"
 CONFIG_commands_run=('curl') # List of commands for full running
-CONFIG_level_logging=0  # No logging
 CONFIG_flag_root=1	# Check root privileges flag
+CONFIG_flag_force_success=0
+CONFIG_flag_force_failure=0
 CONFIG_status="/tmp/${CONFIG_script}.inf"  # Status file
 CONFIG_freedns_host="sync.afraid.org/u"
 CONFIG_freedns_token=""
@@ -107,6 +112,8 @@ show_help () {
 	echo "
 Update IP address at FreeDNS service.
 $(process_help -o)
+  -1 pretend (force) successful IP update
+  -2 pretend (force) failed IP update
 $(process_help -f)
 "
 }
@@ -126,17 +133,21 @@ stop_script () {
 write_freedns () {
   local msg resp output
   msg="HTTP request to FreeDNS"
-	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)${sep}"
-	if [[ $CONFIG_flag_dryrun -eq 0 ]]
+	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)$(force_token)${sep}"
+	# Dry run simulation
+	if [[ ${CONFIG_flag_force_success} -eq 1 || ${CONFIG_flag_dryrun} -eq 1 ]]
 	then
+		resp=${CONFIG_freedns_code_OK}
+	elif [[ ${CONFIG_flag_force_failure} -eq 1 ]]
+	then
+		resp=000
+	else
 		# Compose and send HTTP request
 		resp=$(curl --silent \
 --write-out %{response_code} \
 --output "${CONFIG_status}" \
 --request GET "${CONFIG_freedns_host}/${CONFIG_freedns_token}/" \
 )
-	else
-		resp=${CONFIG_freedns_code_OK}
 	fi
 	result="HTTP status code ${resp}"
 	if [ -n "${CONFIG_status}" ]
@@ -146,7 +157,6 @@ write_freedns () {
 	if [[ ${resp} -ne ${CONFIG_freedns_code_OK} ]]
 	then
 		echo_text -${CONST_level_verbose_info} "failed with ${result}. Exiting."
-		log_text -FS "${msg}${sep}${result}"
 		fatal_error -s "${msg} failed with ${result}."
 	else
 		echo_text -${CONST_level_verbose_info} "${resp}."
@@ -157,6 +167,30 @@ write_freedns () {
 
 # Process command line parameters
 process_options $@
+while getopts "${LIB_options}12" opt
+do
+	case "$opt" in
+	1)
+		CONFIG_flag_force_success=1
+		CONFIG_flag_force=1
+		;;
+	2)
+		CONFIG_flag_force_failure=1
+		CONFIG_flag_force=1
+		;;
+	\?)
+		msg="Unknown option '-$OPTARG'."
+		fatal_error "$msg $help"
+		;;
+	:)
+		case "$OPTARG" in
+		*)
+			msg="Missing argument for option '-$OPTARG'."
+			;;
+		esac
+		fatal_error "$msg $help"
+	esac
+done
 
 init_script
 show_configs
