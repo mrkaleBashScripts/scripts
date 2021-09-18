@@ -29,7 +29,7 @@ fi
 # -> BEGIN Library configs
 LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.11.0"
+LIB_version="0.12.0"
 # Process default options
 # LIB_options_exclude=('t' 'l') # List of omitted options at the very begining of script
 LIB_options=":hsVcmvo:l:f:p:t:"
@@ -180,6 +180,7 @@ prefix_token () {
 #    -s ... insert space prefix at the very beginning of the text
 #    -w ... insert warning prefix at the very beginning of the text
 #    -e ... write as error to standard error output
+#    -x ... write as fatal to standard error output
 #    -p ... use printf instead of echo, i.e., do not use new-line
 #    -b ... print blank line before message
 #    -a ... print blank line after message
@@ -192,7 +193,7 @@ echo_text () {
   local prefix=""
   local redir=0 before=0 after=0 print=0
   local level=${CONST_level_verbose_dft}
-  while getopts ":SIWEFLhfswepba012345" opt
+  while getopts ":SIWEFLhfswexpba012345" opt
   do
     case "$opt" in
     S|I|W|E|F|L)
@@ -212,6 +213,10 @@ echo_text () {
       ;;
     e)
       prefix+="$(echo_text -wp)$(prefix_token -ESL)"
+      redir=1
+      ;;
+    x)
+      prefix+="$(echo_text -wp)$(prefix_token -FSL)"
       redir=1
       ;;
     p)
@@ -343,7 +348,7 @@ fatal_error () {
   log_text -FS -${CONST_level_logging_error} "$@"
   if [[ $flag_silent -eq 0 ]]
   then
-    echo_text -e -${CONST_level_verbose_error} "$@"
+    echo_text -x -${CONST_level_verbose_error} "$@"
     exit 1
   else
     exit 0
