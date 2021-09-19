@@ -29,7 +29,7 @@ fi
 # -> BEGIN Library configs
 LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.12.0"
+LIB_version="0.12.1"
 # Process default options
 # LIB_options_exclude=('t' 'l') # List of omitted options at the very begining of script
 LIB_options=":hsVcmvo:l:f:p:t:"
@@ -58,8 +58,8 @@ CONFIG_credentials=""  # Credentials file
 CONFIG_status=""  # Status file
 CONFIG_thingsboard_host=""
 CONFIG_thingsboard_token=""
-CONFIG_thingsboard_fail_count=3 # HTTP request retries
-CONFIG_thingsboard_fail_delay=5 # Retry seconds for another HTTP request
+CONFIG_thingsboard_fail_count=4 # HTTP request retries
+CONFIG_thingsboard_fail_delay=15 # Retry seconds for another HTTP request
 CONFIG_thingsboard_code_OK=200
 # <- END Common working configs
 
