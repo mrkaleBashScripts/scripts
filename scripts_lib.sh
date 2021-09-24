@@ -433,7 +433,7 @@ check_level_verbose () {
 # @deps:  none
 dryrun_token () {
   local msg_dryrun
-  if [[ $CONFIG_flag_dryrun -eq 1 ]]
+  if [[ ${CONFIG_flag_dryrun} -eq 1 ]]
   then
     msg_dryrun=" ... dryrun"
   else
@@ -482,7 +482,7 @@ check_commands () {
   echo_text -hp -${CONST_level_verbose_info} "Checking expected commands$(dryrun_token) ... "
   cmd_list=${CONFIG_commands_common[@]}
   cmd_list+=" ${CONFIG_commands[@]}"
-  if [ $CONFIG_flag_dryrun -eq 1 ]
+  if [ ${CONFIG_flag_dryrun} -eq 1 ]
   then
     cmd_list+=" ${CONFIG_commands_dryrun[@]}"
   else
@@ -513,7 +513,7 @@ check_root () {
   if [ $CONFIG_flag_root -eq 1 ]
   then
     echo_text -hp -${CONST_level_verbose_info} "Checking script privilegies$(dryrun_token) ... "
-    if [[ $CONFIG_flag_dryrun -eq 1 || $(id -u) -eq 0 ]]
+    if [[ ${CONFIG_flag_dryrun} -eq 1 || $(id -u) -eq 0 ]]
     then
       echo_text -${CONST_level_verbose_info} "ok ... $(whoami). Proceeding."
     else
@@ -643,7 +643,7 @@ process_folder () {
       if chk_folder_writable "${folder}"
       then
         echo_text -${CONST_level_verbose_info} "writable. Proceeding."
-      elif [ $CONFIG_flag_dryrun -eq 1 ]
+      elif [ ${CONFIG_flag_dryrun} -eq 1 ]
       then
         echo_text -${CONST_level_verbose_info} "unwritable. Proceeding$(dryrun_token)."
       else
@@ -923,7 +923,7 @@ write2thingsboard () {
   payload="$1"
   msg="HTTP request to ThingsBoard"
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)${sep}${payload}${sep}"
-	if [[ $CONFIG_flag_dryrun -eq 0 && -n "${payload}" ]]
+	if [[ ${CONFIG_flag_dryrun} -eq 0 && -n "${payload}" ]]
 	then
 		# Compose and send HTTP request
 		for (( i=0; i<${CONFIG_thingsboard_fail_count}; i++))
