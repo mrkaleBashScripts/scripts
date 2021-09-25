@@ -96,6 +96,12 @@
 #   -4  Force battery supply
 #       Pretend failed electrical mains.
 #
+#   -5  Force all camera connection
+#       Pretend functional wifi connection to all cameras.
+#
+#   -6  Force no camera connection
+#       Pretend broken wifi connection of all cameras.
+#
 # ARGS:
 #   ICSE_devfile  Device file of a relay board in '/dev' folder
 #   log_file      Alternative log file to default one for persisting working
@@ -132,23 +138,27 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.1.0"
+CONFIG_version="0.2.0"
 CONFIG_commands=('grep' 'ping') # Array of generally needed commands
 CONFIG_commands_run=('curl' 'xxd') # List of commands for full running
 CONFIG_flag_root=1	# Check root privileges flag
 CONFIG_flag_force_norelay=0
-CONFIG_flag_force_inet=0
-CONFIG_flag_force_noinet=0
 CONFIG_flag_force_mains=0
 CONFIG_flag_force_batt=0
-CONFIG_inet_ip="8.8.4.4"	# External test IP address of Google, inc.
-CONFIG_inet_active="ON"
-CONFIG_inet_idle="OFF"
-CONFIG_inet_status=""
-CONFIG_mains_active="ON"
-CONFIG_mains_idle="OFF"
+CONFIG_flag_force_inet=0
+CONFIG_flag_force_noinet=0
+CONFIG_flag_force_cam=0
+CONFIG_flag_force_nocam=0
+CONFIG_active="ON"
+CONFIG_idle="OFF"
 CONFIG_mains_status=""
+CONFIG_inet_status=""
+CONFIG_camera_front_status=""
+CONFIG_camera_back_status=""
+CONFIG_inet_ip="8.8.4.4"	# External test IP address of Google, inc.
 CONFIG_icse_file=""	# Device file of the relay board
+CONFIG_camera_front_ip=""
+CONFIG_camera_back_ip=""
 CONFIG_log_file="/tmp/${CONFIG_script}.dat"	# Persistent log file
 CONFIG_log_count=3	# Count-down periods
 CONFIG_status="/tmp/${CONFIG_script}.inf"  # Status file
@@ -170,10 +180,12 @@ Temporarily turn off the ICSE relay for rebooting a router after a couple of
 running periods.
 $(process_help -o)
   -0 force USB relay ignoring (never turn it off)
-  -1 pretend (force) correct connection
-  -2 pretend (force) failed connection
-  -3 pretend (force) mains power supply
-  -4 pretend (force) battery power supply
+  -1 pretend (force) mains power supply
+  -2 pretend (force) battery power supply
+  -3 pretend (force) correct internet connection
+  -4 pretend (force) failed internet connection
+  -5 pretend (force) correct connection of all cameras
+  -6 pretend (force) failed connection of all cameras
 
   ICSE_devfile: device file of a relay board in '/dev' folder
   log_file: alternative log file to default one for persisting working variables
@@ -185,7 +197,7 @@ $(process_help -f)
 # @return: LOG_* variables
 # @deps: CONFIG_* variables
 init_logvars () {
-	LOG_relay=${CONFIG_inet_active}
+	LOG_relay=${CONFIG_active}
 	LOG_period=${CONFIG_log_count}
 	LOG_toggle=0
 }
@@ -197,7 +209,7 @@ init_logvars () {
 save_logvars () {
 	if [[ -n "${CONFIG_inet_status}" ]]
 	then
-		if [[ "${CONFIG_inet_status}" == "${CONFIG_inet_idle}" ]]
+		if [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
 		then
 			set | grep "^LOG_" > "${CONFIG_log_file}"
 		elif [[ -f "${CONFIG_log_file}" ]]
@@ -227,10 +239,10 @@ check_mains () {
 	# Dry run simulation
 	if [[ ${CONFIG_flag_force_mains} -eq 1 ]]
 	then
-		CONFIG_mains_status=${CONFIG_mains_active}
+		CONFIG_mains_status=${CONFIG_active}
 	elif [[ ${CONFIG_flag_force_batt} -eq 1 ]]
 	then
-		CONFIG_mains_status=${CONFIG_mains_idle}
+		CONFIG_mains_status=${CONFIG_idle}
 	else
 		CONFIG_mains_status=""
 		# WSL2
@@ -244,10 +256,10 @@ check_mains () {
 				result=$(cat ${file})
 				if [[ ${result} -eq 1 ]]
 				then
-					CONFIG_mains_status=${CONFIG_mains_active}
+					CONFIG_mains_status=${CONFIG_active}
 				elif [[ ${result} -eq 0 ]]
 				then
-					CONFIG_mains_status=${CONFIG_mains_idle}
+					CONFIG_mains_status=${CONFIG_idle}
 				fi
 			fi
 		fi
@@ -262,9 +274,9 @@ check_mains () {
 				result=$(cat ${file})
 				if [[ ${result} == "Discharging" ]]
 				then
-					CONFIG_mains_status=${CONFIG_mains_idle}
+					CONFIG_mains_status=${CONFIG_idle}
 				else
-					CONFIG_mains_status=${CONFIG_mains_active}
+					CONFIG_mains_status=${CONFIG_active}
 				fi
 			fi
 		fi
@@ -279,10 +291,10 @@ check_mains () {
 				result=$(cat ${file})
 				if [[ ${result} -eq 1 ]]
 				then
-					CONFIG_mains_status=${CONFIG_mains_active}
+					CONFIG_mains_status=${CONFIG_active}
 				elif [[ ${result} -eq 0 ]]
 				then
-					CONFIG_mains_status=${CONFIG_mains_idle}
+					CONFIG_mains_status=${CONFIG_idle}
 				fi
 			fi
 		fi
@@ -305,10 +317,10 @@ check_inet () {
 	# Dry run simulation
 	if [[ ${CONFIG_flag_force_inet} -eq 1 ]]
 	then
-		CONFIG_inet_status=${CONFIG_inet_active}
+		CONFIG_inet_status=${CONFIG_active}
 	elif [[ ${CONFIG_flag_force_noinet} -eq 1 ]]
 	then
-		CONFIG_inet_status=${CONFIG_inet_idle}
+		CONFIG_inet_status=${CONFIG_idle}
 	# Check connection to internet
 	else
 		TestIP=${CONFIG_inet_ip}
@@ -317,15 +329,15 @@ check_inet () {
 			ping -c1 -w5 ${TestIP} >/dev/null
 			if [ $? -eq 0 ]
 			then
-				CONFIG_inet_status=${CONFIG_inet_active}
+				CONFIG_inet_status=${CONFIG_active}
 			else
-				CONFIG_inet_status=${CONFIG_inet_idle}
+				CONFIG_inet_status=${CONFIG_idle}
 			fi
 		fi
 	fi
 	echo_text -${CONST_level_verbose_info} "${CONFIG_inet_status}."
 	period=""
-	if [[ "${CONFIG_inet_status}" == "${CONFIG_inet_idle}" ]]
+	if [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
 	then
 		period=" ($((${CONFIG_log_count}-${LOG_period}+1)))"
 	fi
@@ -343,14 +355,14 @@ relay_toggle () {
 	local msg result
 	msg="Toggling relay '${CONFIG_icse_file}'"
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)"
-	if [[ "${LOG_relay}" == "${CONFIG_inet_active}" ]]
+	if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
 	then
 		# Control both relays on the board at once
 		control_byte="03"
-		LOG_relay=${CONFIG_inet_idle}
+		LOG_relay=${CONFIG_idle}
 	else
 		control_byte="00"
-		LOG_relay=${CONFIG_inet_active}
+		LOG_relay=${CONFIG_active}
 	fi
 	if [[ $CONFIG_flag_dryrun -ne 0 ]]
 	then
@@ -379,7 +391,7 @@ relay_toggle () {
 relay_control () {
 	local msg
 	msg="Control relay '${CONFIG_icse_file}'${sep}"
-	if [[ "${CONFIG_inet_status}" == "${CONFIG_inet_idle}" ]]
+	if [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
 	then
 		((LOG_period--))
 		msg="${msg}countdown${sep}Inet ${CONFIG_inet_status}"
@@ -389,11 +401,85 @@ relay_control () {
 		then
 			relay_toggle
 		fi
-	elif [[ "${CONFIG_inet_status}" == "${CONFIG_inet_active}"
-			&& "${LOG_relay}" == "${CONFIG_inet_idle}" ]]
+	elif [[ "${CONFIG_inet_status}" == "${CONFIG_active}"
+			&& "${LOG_relay}" == "${CONFIG_idle}" ]]
 	then
 		relay_toggle
 	fi
+}
+
+# @info:  Checking front camera wifi connection
+# @args:  none
+# @return: global config variable
+# @deps:  none
+check_camera_front () {
+	msg="Checking camera status${sep}front"
+  camera_status=${CONFIG_idle}
+	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
+	# Dry run simulation
+	if [[ ${CONFIG_flag_force_cam} -eq 1 ]]
+	then
+		camera_status=${CONFIG_active}
+	elif [[ ${CONFIG_flag_force_nocam} -eq 1 ]]
+	then
+		camera_status=${CONFIG_idle}
+	# Check connection to wifi
+	else
+		if [ -n "${CONFIG_camera_front_ip}" ]
+		then
+			ping -c1 -w5 ${CONFIG_camera_front_ip} >/dev/null
+			if [ $? -eq 0 ]
+			then
+				camera_status=${CONFIG_active}
+			else
+				camera_status=${CONFIG_idle}
+			fi
+		fi
+	fi
+	echo_text -${CONST_level_verbose_info} "${camera_status}."
+	log_text -IS "${msg}${sep}${camera_status}"
+	if [ -n "${CONFIG_status}" ]
+	then
+		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${camera_status}." >> "${CONFIG_status}"
+	fi
+	CONFIG_camera_front_status=${camera_status}
+}
+
+# @info:  Checking back camera wifi connection
+# @args:  none
+# @return: global config variable
+# @deps:  none
+check_camera_back () {
+	msg="Checking camera status${sep}back"
+  camera_status=${CONFIG_idle}
+	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
+	# Dry run simulation
+	if [[ ${CONFIG_flag_force_cam} -eq 1 ]]
+	then
+		camera_status=${CONFIG_active}
+	elif [[ ${CONFIG_flag_force_nocam} -eq 1 ]]
+	then
+		camera_status=${CONFIG_idle}
+	# Check connection to wifi
+	else
+		if [ -n "${CONFIG_camera_back_ip}" ]
+		then
+			ping -c1 -w5 ${CONFIG_camera_back_ip} >/dev/null
+			if [ $? -eq 0 ]
+			then
+				camera_status=${CONFIG_active}
+			else
+				camera_status=${CONFIG_idle}
+			fi
+		fi
+	fi
+	echo_text -${CONST_level_verbose_info} "${camera_status}."
+	log_text -IS "${msg}${sep}${camera_status}"
+	if [ -n "${CONFIG_status}" ]
+	then
+		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${camera_status}." >> "${CONFIG_status}"
+	fi
+	CONFIG_camera_back_status=${camera_status}
 }
 
 # @info:  Send data to ThingsBoard IoT platform
@@ -401,56 +487,84 @@ relay_control () {
 # @return: global CONFIG_thingsboard_code variable
 # @deps:  global CONFIG_inet variables
 write_thingsboard () {
-	local reqdata mains inet relay
+	local reqdata item
 	# Compose data items for power supply status
-	if [[ "${CONFIG_mains_status}" == "${CONFIG_mains_active}" ]]
+	item=""
+	if [[ "${CONFIG_mains_status}" == "${CONFIG_active}" ]]
 	then
-		mains="true"
-	elif [[ "${CONFIG_mains_status}" == "${CONFIG_mains_idle}" ]]
+		item="true"
+	elif [[ "${CONFIG_mains_status}" == "${CONFIG_idle}" ]]
 	then
-		mains="false"
+		item="false"
 	fi
-	if [ -n "${mains}" ]
+	if [ -n "${item}" ]
 	then
-		reqdata="${reqdata}\"powerSupply\":${mains},"
+		reqdata="${reqdata}\"powerSupply\":${item},"
 	fi
 	# Compose data item for internet connection status only at mains
-	if [[ "${CONFIG_mains_status}" == "${CONFIG_mains_active}" ]]
+	if [[ "${CONFIG_mains_status}" == "${CONFIG_active}" ]]
 	then
-		if [[ "${CONFIG_inet_status}" == "${CONFIG_inet_active}" ]]
+		item=""
+		if [[ "${CONFIG_inet_status}" == "${CONFIG_active}" ]]
 		then
-			inet="true"
-			if [ -f "${CONFIG_log_file}" ]
-			then
-				relay="true"
-			fi
-		elif [[ "${CONFIG_inet_status}" == "${CONFIG_inet_idle}" ]]
+			item="true"
+		elif [[ "${CONFIG_inet_status}" == "${CONFIG_idle}" ]]
 		then
-			inet="false"
-		else
-			inet=""
+			item="false"
 		fi
-		if [ -n "${inet}" ]
+		if [ -n "${item}" ]
 		then
-			reqdata="${reqdata}\"inetConnect\":${inet},"
+			reqdata="${reqdata}\"inetConnect\":${item},"
 		fi
 		# Compose data item for relay toggling
-		if [[ ${LOG_toggle} -eq 1 ]]
+		item=""
+		if [[ "${CONFIG_inet_status}" == "${CONFIG_active}" &&  -f "${CONFIG_log_file}" ]]
 		then
-			if [[ "${LOG_relay}" == "${CONFIG_inet_active}" ]]
+			item="true"
+		elif [[ ${LOG_toggle} -eq 1 ]]
+		then
+			if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
 			then
-				relay="true"
-			elif [[ "${LOG_relay}" == "${CONFIG_inet_idle}" ]]
+				item="true"
+			elif [[ "${LOG_relay}" == "${CONFIG_idle}" ]]
 			then
-				relay="false"
-			else
-				relay=""
+				item="false"
 			fi
 			LOG_toggle=0
 		fi
-		if [ -n "${relay}" ]
+		if [ -n "${item}" ]
 		then
-			reqdata="${reqdata}\"inetRelay\":${relay},"
+			reqdata="${reqdata}\"inetRelay\":${item},"
+		fi
+		# Compose data item for camera connection status only at internet available
+		if [[ "${CONFIG_inet_status}" == "${CONFIG_active}" ]]
+		then
+			# Compose data item for front camera
+			item=""
+			if [[ "${CONFIG_camera_front_status}" == "${CONFIG_active}" ]]
+			then
+				item="true"
+			elif [[ "${CONFIG_camera_front_status}" == "${CONFIG_idle}" ]]
+			then
+				item="false"
+			fi
+			if [ -n "${item}" ]
+			then
+				reqdata="${reqdata}\"cameraFront\":${item},"
+			fi
+			# Compose data item for back camera
+			item=""
+			if [[ "${CONFIG_camera_back_status}" == "${CONFIG_active}" ]]
+			then
+				item="true"
+			elif [[ "${CONFIG_camera_back_status}" == "${CONFIG_idle}" ]]
+			then
+				item="false"
+			fi
+			if [ -n "${item}" ]
+			then
+				reqdata="${reqdata}\"cameraBack\":${item},"
+			fi
 		fi
 	fi
 	# Process request payload
@@ -476,7 +590,7 @@ write_thingsboard () {
 
 # Process command line parameters
 process_options $@
-while getopts "${LIB_options}01234" opt
+while getopts "${LIB_options}0123456" opt
 do
 	case "$opt" in
 	0)
@@ -484,19 +598,27 @@ do
 		CONFIG_flag_force=1
 		;;
 	1)
-		CONFIG_flag_force_inet=1
-		CONFIG_flag_force=1
-		;;
-	2)
-		CONFIG_flag_force_noinet=1
-		CONFIG_flag_force=1
-		;;
-	3)
 		CONFIG_flag_force_mains=1
 		CONFIG_flag_force=1
 		;;
-	4)
+	2)
 		CONFIG_flag_force_batt=1
+		CONFIG_flag_force=1
+		;;
+	3)
+		CONFIG_flag_force_inet=1
+		CONFIG_flag_force=1
+		;;
+	4)
+		CONFIG_flag_force_noinet=1
+		CONFIG_flag_force=1
+		;;
+	5)
+		CONFIG_flag_force_cam=1
+		CONFIG_flag_force=1
+		;;
+	6)
+		CONFIG_flag_force_nocam=1
 		CONFIG_flag_force=1
 		;;
 	\?)
@@ -553,10 +675,15 @@ fi
 
 check_mains
 # Do not check internet and control relay when there is no power supply
-if [[ "${CONFIG_mains_status}" == "${CONFIG_mains_active}" ]]
+if [[ "${CONFIG_mains_status}" == "${CONFIG_active}" ]]
 then
 	check_inet
 	relay_control
+	if [[ "${CONFIG_inet_status}" == "${CONFIG_active}" ]]
+	then
+		check_camera_front
+		check_camera_back
+	fi
 fi
 write_thingsboard
 
