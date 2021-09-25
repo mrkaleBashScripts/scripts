@@ -233,8 +233,10 @@ stop_script () {
 # @return: global config variable
 # @deps:  Overloaded library function
 check_mains () {
-	local file result
+	local file result logpfx
 	msg="Checking mains power supply status"
+	logpfx="I"
+	CONFIG_mains_status=${CONFIG_idle}
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
 	# Dry run simulation
 	if [[ ${CONFIG_flag_force_mains} -eq 1 ]]
@@ -243,6 +245,7 @@ check_mains () {
 	elif [[ ${CONFIG_flag_force_batt} -eq 1 ]]
 	then
 		CONFIG_mains_status=${CONFIG_idle}
+		logpfx="E"
 	else
 		CONFIG_mains_status=""
 		# WSL2
@@ -260,6 +263,7 @@ check_mains () {
 				elif [[ ${result} -eq 0 ]]
 				then
 					CONFIG_mains_status=${CONFIG_idle}
+					logpfx="E"
 				fi
 			fi
 		fi
@@ -275,6 +279,7 @@ check_mains () {
 				if [[ ${result} == "Discharging" ]]
 				then
 					CONFIG_mains_status=${CONFIG_idle}
+					logpfx="E"
 				else
 					CONFIG_mains_status=${CONFIG_active}
 				fi
@@ -295,15 +300,16 @@ check_mains () {
 				elif [[ ${result} -eq 0 ]]
 				then
 					CONFIG_mains_status=${CONFIG_idle}
+					logpfx="E"
 				fi
 			fi
 		fi
 	fi
 	echo_text -${CONST_level_verbose_info} "${CONFIG_mains_status}."
-	log_text -IS "${msg}${sep}${CONFIG_mains_status}"
+	log_text -${logpfx}S "${msg}${sep}${CONFIG_mains_status}"
 	if [ -n "${CONFIG_status}" ]
 	then
-		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_mains_status}." >> "${CONFIG_status}"
+		echo_text -${logpfx}SL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_mains_status}." >> "${CONFIG_status}"
 	fi
 }
 
@@ -312,7 +318,10 @@ check_mains () {
 # @return: global config variable
 # @deps:  none
 check_inet () {
+	local msg period
 	msg="Checking internet connection status"
+	logpfx="I"
+	CONFIG_inet_status=${CONFIG_idle}
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
 	# Dry run simulation
 	if [[ ${CONFIG_flag_force_inet} -eq 1 ]]
@@ -321,17 +330,18 @@ check_inet () {
 	elif [[ ${CONFIG_flag_force_noinet} -eq 1 ]]
 	then
 		CONFIG_inet_status=${CONFIG_idle}
+		logpfx="E"
 	# Check connection to internet
 	else
-		TestIP=${CONFIG_inet_ip}
-		if [ -n "${TestIP}" ]
+		if [ -n "${CONFIG_inet_ip}" ]
 		then
-			ping -c1 -w5 ${TestIP} >/dev/null
+			ping -c1 -w5 ${CONFIG_inet_ip} >/dev/null
 			if [ $? -eq 0 ]
 			then
 				CONFIG_inet_status=${CONFIG_active}
 			else
 				CONFIG_inet_status=${CONFIG_idle}
+				logpfx="E"
 			fi
 		fi
 	fi
@@ -341,10 +351,10 @@ check_inet () {
 	then
 		period=" ($((${CONFIG_log_count}-${LOG_period}+1)))"
 	fi
-	log_text -IS "${msg}${period}${sep}${CONFIG_inet_status}"
+	log_text -${logpfx}S "${msg}${period}${sep}${CONFIG_inet_status}"
 	if [ -n "${CONFIG_status}" ]
 	then
-		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_inet_status}." >> "${CONFIG_status}"
+		echo_text -${logpfx}SL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_inet_status}." >> "${CONFIG_status}"
 	fi
 }
 
@@ -413,16 +423,19 @@ relay_control () {
 # @return: global config variable
 # @deps:  none
 check_camera_front () {
+	local msg logpfx
 	msg="Checking camera status${sep}front"
-  camera_status=${CONFIG_idle}
+	logpfx="I"
+  CONFIG_camera_front_status=${CONFIG_idle}
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
 	# Dry run simulation
 	if [[ ${CONFIG_flag_force_cam} -eq 1 ]]
 	then
-		camera_status=${CONFIG_active}
+		CONFIG_camera_front_status=${CONFIG_active}
 	elif [[ ${CONFIG_flag_force_nocam} -eq 1 ]]
 	then
-		camera_status=${CONFIG_idle}
+		CONFIG_camera_front_status=${CONFIG_idle}
+		logpfx="E"
 	# Check connection to wifi
 	else
 		if [ -n "${CONFIG_camera_front_ip}" ]
@@ -430,19 +443,19 @@ check_camera_front () {
 			ping -c1 -w5 ${CONFIG_camera_front_ip} >/dev/null
 			if [ $? -eq 0 ]
 			then
-				camera_status=${CONFIG_active}
+				CONFIG_camera_front_status=${CONFIG_active}
 			else
-				camera_status=${CONFIG_idle}
+				CONFIG_camera_front_status=${CONFIG_idle}
+				logpfx="E"
 			fi
 		fi
 	fi
-	echo_text -${CONST_level_verbose_info} "${camera_status}."
-	log_text -IS "${msg}${sep}${camera_status}"
+	echo_text -${CONST_level_verbose_info} "${CONFIG_camera_front_status}."
+	log_text -${logpfx}S "${msg}${sep}${CONFIG_camera_front_status}"
 	if [ -n "${CONFIG_status}" ]
 	then
-		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${camera_status}." >> "${CONFIG_status}"
+		echo_text -${logpfx}SL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_camera_front_status}." >> "${CONFIG_status}"
 	fi
-	CONFIG_camera_front_status=${camera_status}
 }
 
 # @info:  Checking back camera wifi connection
@@ -450,16 +463,19 @@ check_camera_front () {
 # @return: global config variable
 # @deps:  none
 check_camera_back () {
+	local msg logpfx
 	msg="Checking camera status${sep}back"
-  camera_status=${CONFIG_idle}
+	logpfx="I"
+  CONFIG_camera_back_status=${CONFIG_idle}
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
 	# Dry run simulation
 	if [[ ${CONFIG_flag_force_cam} -eq 1 ]]
 	then
-		camera_status=${CONFIG_active}
+		CONFIG_camera_back_status=${CONFIG_active}
 	elif [[ ${CONFIG_flag_force_nocam} -eq 1 ]]
 	then
-		camera_status=${CONFIG_idle}
+		CONFIG_camera_back_status=${CONFIG_idle}
+		logpfx="E"
 	# Check connection to wifi
 	else
 		if [ -n "${CONFIG_camera_back_ip}" ]
@@ -467,19 +483,19 @@ check_camera_back () {
 			ping -c1 -w5 ${CONFIG_camera_back_ip} >/dev/null
 			if [ $? -eq 0 ]
 			then
-				camera_status=${CONFIG_active}
+				CONFIG_camera_back_status=${CONFIG_active}
 			else
-				camera_status=${CONFIG_idle}
+				CONFIG_camera_back_status=${CONFIG_idle}
+				logpfx="E"
 			fi
 		fi
 	fi
-	echo_text -${CONST_level_verbose_info} "${camera_status}."
-	log_text -IS "${msg}${sep}${camera_status}"
+	echo_text -${CONST_level_verbose_info} "${CONFIG_camera_back_status}."
+	log_text -${logpfx}S "${msg}${sep}${CONFIG_camera_back_status}"
 	if [ -n "${CONFIG_status}" ]
 	then
-		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${camera_status}." >> "${CONFIG_status}"
+		echo_text -${logpfx}SL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_camera_back_status}." >> "${CONFIG_status}"
 	fi
-	CONFIG_camera_back_status=${camera_status}
 }
 
 # @info:  Send data to ThingsBoard IoT platform
