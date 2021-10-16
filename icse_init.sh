@@ -88,9 +88,9 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.2.0"
+CONFIG_version="0.3.0"
 CONFIG_commands=('xxd') # Array of generally needed commands
-CONFIG_commands_run=('') # List of commands for full running
+CONFIG_commands_run=('sleep') # List of commands for full running
 CONFIG_level_logging=0  # No logging
 CONFIG_flag_root=1	# Check root privileges flag
 CONFIG_icse_file=""	# Device file of the relay board
@@ -110,7 +110,7 @@ show_help () {
 	echo "${CONFIG_script} [OPTION [ARG]] ICSE_devfile"
 	echo "
 Initialize particular ICSE relay board.
-$(process_help -b)
+$(process_help -o)
 
   ICSE_devfile: device file of a relay board in '/dev' folder
 $(process_help -f)
@@ -127,22 +127,6 @@ stop_script () {
 
 # Process command line parameters
 process_options $@
-while getopts "${LIB_options}12" opt
-do
-	case "$opt" in
-	\?)
-		msg="Unknown option '-$OPTARG'."
-		fatal_error "$msg $help"
-		;;
-	:)
-		case "$OPTARG" in
-		*)
-			msg="Missing argument for option '-$OPTARG'."
-			;;
-		esac
-		fatal_error "$msg $help"
-	esac
-done
 
 # Process non-option arguments
 shift $(($OPTIND-1))
@@ -168,7 +152,8 @@ echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token) ... "
 init="50 50 50 50 51 52 00 00"
 if [[ $CONFIG_flag_dryrun -eq 0 ]]
 then
-	echo "${init}" | xxd -r -p > "${CONFIG_icse_file}" ; sleep ${CONFIG_icse_delay}
+	echo "${init}" | xxd -r -p > "${CONFIG_icse_file}"
+	sleep ${CONFIG_icse_delay}
 fi
 echo_text -${CONST_level_verbose_info} "OK."
 if [ -n "${CONFIG_status}" ]

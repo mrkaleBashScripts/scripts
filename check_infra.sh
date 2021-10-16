@@ -16,13 +16,15 @@
 # - The scripts checks if local server has connection to the internet, i.e.,
 #   the router is functional and can pings to selected external IP addresss.
 # - The script controls the USB relay board ICSE013A with 2 relays both at once.
-# - One of relay supplies the internet router and work in oposite order, i.e.,
+# - One of relays supplies the internet router and works in opposite order, i.e.,
 #   Normally Closed ports are utilized and relay supplies in OFF state.
 # - At detection internet outage, the script starts countdown and executes itself
 #   3 times. If there is still outage, the script turns the relay ON, which means
-#   switching OFF the router. In this state the script starts new countdown
-#   and executes itself 3 times as a waiting period for discharching the router.
-#   Then the script turns the relay OFF again, which connects mains to the router
+#   switching OFF the router. Right before it the script initializes the relay
+#   board for sure, even if it is initialized at system boot or USB cable plug-in.
+#   In this state the script starts new countdown and executes itself 3 times
+#   as a waiting period for discharching the router.
+# - Then the script turns the relay OFF again, which connects mains to the router
 #   and starts the entire process again. If the internet connection is restored
 #   during that process, the script waits to another internet outage for rebooting
 #   router again.
@@ -138,9 +140,9 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.2.0"
+CONFIG_version="0.3.0"
 CONFIG_commands=('grep' 'ping') # Array of generally needed commands
-CONFIG_commands_run=('curl' 'xxd') # List of commands for full running
+CONFIG_commands_run=('curl' 'xxd' 'sleep') # List of commands for full running
 CONFIG_flag_root=1	# Check root privileges flag
 CONFIG_flag_force_norelay=0
 CONFIG_flag_force_mains=0
@@ -157,6 +159,7 @@ CONFIG_camera_front_status=""
 CONFIG_camera_back_status=""
 CONFIG_inet_ip="8.8.4.4"	# External test IP address of Google, inc.
 CONFIG_icse_file=""	# Device file of the relay board
+CONFIG_icse_delay=1	# Delay in seconds between control bytes sending
 CONFIG_camera_front_ip=""
 CONFIG_camera_back_ip=""
 CONFIG_log_file="/tmp/${CONFIG_script}.dat"	# Persistent log file
@@ -362,15 +365,18 @@ check_inet () {
 # @return: LOG_* variables
 # @deps: CONFIG_* variables
 relay_toggle () {
-	local msg result
+	local msg result init control_byte
 	msg="Toggling relay '${CONFIG_icse_file}'"
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)"
 	if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
 	then
+		# Initialize relay for sure (even if done at boot or USB plug-in)
+		init="50 50 50 50 51 52 00 00"
 		# Control both relays on the board at once
 		control_byte="03"
 		LOG_relay=${CONFIG_idle}
 	else
+		init=""
 		control_byte="00"
 		LOG_relay=${CONFIG_active}
 	fi
@@ -382,7 +388,14 @@ relay_toggle () {
 	then
 		msg="${msg}$(force_token) intact"
 	else
-		echo "${control_byte}" | xxd -r -p > ${CONFIG_icse_file}
+		# Initialize
+		if [ -n "${init}" ]
+		then
+			echo "${init}" | xxd -r -p > "${CONFIG_icse_file}"
+			sleep ${CONFIG_icse_delay}
+		fi
+		# Control
+		echo "${control_byte}" | xxd -r -p > "${CONFIG_icse_file}"
 	fi
 	LOG_period=${CONFIG_log_count}
 	LOG_toggle=1
