@@ -140,9 +140,9 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.3.0"
+CONFIG_version="0.3.1"
 CONFIG_commands=('grep' 'ping') # Array of generally needed commands
-CONFIG_commands_run=('curl' 'xxd' 'sleep') # List of commands for full running
+CONFIG_commands_run=('curl' 'xxd') # List of commands for full running
 CONFIG_flag_root=1	# Check root privileges flag
 CONFIG_flag_force_norelay=0
 CONFIG_flag_force_mains=0
@@ -516,7 +516,8 @@ check_camera_back () {
 # @return: global CONFIG_thingsboard_code variable
 # @deps:  global CONFIG_inet variables
 write_thingsboard () {
-	local reqdata item
+	local reqdata item logpfx
+	logpfx="I"
 	# Compose data items for power supply status
 	item=""
 	if [[ "${CONFIG_mains_status}" == "${CONFIG_active}" ]]
@@ -605,10 +606,11 @@ write_thingsboard () {
 		echo_text -h -${CONST_level_verbose_info} "${msg}${sep}${reqdata}."
 	else
 		result="no payload"
+		logpfx="E"
 		echo_text -${CONST_level_verbose_info} "${msg}${sep}${result}. Exiting."
 		if [ -n "${CONFIG_status}" ]
 		then
-			echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
+			echo_text -${logpfx}SL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
 		fi
 		fatal_error "${msg} failed with ${result}."
 	fi

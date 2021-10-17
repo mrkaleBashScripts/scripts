@@ -29,7 +29,7 @@ fi
 # -> BEGIN Library configs
 LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.12.1"
+LIB_version="0.12.2"
 # Process default options
 # LIB_options_exclude=('t' 'l') # List of omitted options at the very begining of script
 LIB_options=":hsVcmvo:l:f:p:t:"
@@ -43,7 +43,7 @@ done
 # -> BEGIN Common working configs
 CONFIG_copyright="(c) $(date +%Y)"
 CONFIG_script=$(basename $0)
-CONFIG_commands_common=('basename' 'dirname' 'hostname' 'date' 'logger' 'whoami' 'id' 'tr') # Common system utility
+CONFIG_commands_common=('basename' 'dirname' 'hostname' 'date' 'logger' 'whoami' 'id' 'tr' 'sleep') # Common system utility
 CONFIG_commands=() # Array of generally needed commands
 CONFIG_commands_run=() # List of commands for full running
 CONFIG_commands_dryrun=() # Array of commands for dry running
@@ -919,10 +919,12 @@ init_script () {
 # @return: none
 # @deps:  global CONFIG_inet variables
 write2thingsboard () {
-  local payload msg resp
+  local payload msg resp logpfx opt
   payload="$1"
   msg="HTTP request to ThingsBoard"
-	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)${sep}${payload}${sep}"
+	logpfx="I"
+  opt=""
+  echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)${sep}${payload}${sep}"
 	if [[ ${CONFIG_flag_dryrun} -eq 0 && -n "${payload}" ]]
 	then
 		# Compose and send HTTP request
@@ -947,12 +949,15 @@ write2thingsboard () {
 	result="HTTP status code ${resp}"
 	if [ -n "${CONFIG_status}" ]
 	then
-		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
+    if [[ ${resp} -ne ${CONFIG_thingsboard_code_OK} ]]
+    then
+      logpfx="E"
+    fi
+		echo_text -${logpfx}SL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
 	fi
 	if [[ ${resp} -ne ${CONFIG_thingsboard_code_OK} ]]
 	then
 		echo_text -${CONST_level_verbose_info} "failed with ${result}. Exiting."
-		opt=""
 		if [[ ${resp} -eq 0 ]]
 		then
 			opt="-s"
