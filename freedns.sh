@@ -88,7 +88,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.2.0"
+CONFIG_version="0.3.0"
 CONFIG_commands_run=('curl') # List of commands for full running
 CONFIG_flag_root=1	# Check root privileges flag
 CONFIG_flag_force_success=0
@@ -150,16 +150,14 @@ write_freedns () {
 )
 	fi
 	result="HTTP status code ${resp}"
-	if [ -n "${CONFIG_status}" ]
-	then
-		echo_text -ISL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
-	fi
 	if [[ ${resp} -ne ${CONFIG_freedns_code_OK} ]]
 	then
 		echo_text -${CONST_level_verbose_info} "failed with ${result}. Exiting."
+		status_text -aF "${msg}${sep}${result}"
 		fatal_error -s "${msg} failed with ${result}."
 	else
 		echo_text -${CONST_level_verbose_info} "${resp}."
+		status_text -a "${msg}${sep}${result}"
 		log_text -IS "${msg}${sep}${result}"
 	fi
 }
@@ -200,12 +198,7 @@ process_folder -t "Status" -f "${CONFIG_status}"
 # -> Script execution
 trap stop_script EXIT
 
-if [ -n "${CONFIG_status}" ]
-then
-	echo_text -h -${CONST_level_verbose_info} "Writing to status file ... '${CONFIG_status}'."
-	echo "" > "${CONFIG_status}"
-fi
-
+status_text
 write_freedns
 
 # End of script processed by TRAP

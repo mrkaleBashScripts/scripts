@@ -305,6 +305,7 @@ log_text () {
 # @desc:  If there no input text and no append option, the status file is just
 #         deleted.
 # @opts:
+#    $1 ... Message for status file
 #    -a ... Append input message to the status file
 #    -I ... Prepend prefix for info to the input message (default)
 #    -W ... Prepend prefix for warning to the input message
@@ -313,7 +314,7 @@ log_text () {
 # @return:  none
 # @deps:  none
 status_text () {
-  local OPTIND opt
+  local OPTIND opt msg
   local flag_append=0
   local pfx="I"
   while getopts ":aIWEF" opt
@@ -330,14 +331,15 @@ status_text () {
   if [ -n "${CONFIG_status}" ]
   then
     shift $(($OPTIND-1))
-    echo_text -f -${CONST_level_verbose_function} "Writing to status file '${CONFIG_status}'${sep}$1"
+    msg="$1"
+    echo_text -f -${CONST_level_verbose_function} "Writing to status file '${CONFIG_status}'${sep}${msg}"
     if [[ $flag_append -eq 0 && -f "${CONFIG_status}" ]]
     then
       rm "${CONFIG_status}" >/dev/null
     fi
-    if [[ -n "$1"]]
+    if [ -n "${msg}"]
     then
-      echo_text -${pfx}SL -${CONST_level_verbose_none} "$1" >> "${CONFIG_status}"
+      echo_text -${pfx}SL -${CONST_level_verbose_none} "${msg}" >> "${CONFIG_status}"
     fi
   fi
 }
