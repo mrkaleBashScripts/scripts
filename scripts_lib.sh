@@ -302,6 +302,8 @@ log_text () {
 }
 
 # @info:  Write text to status file
+# @desc:  If there no input text and no append option, the status file is just
+#         deleted.
 # @opts:
 #    -a ... Append input message to the status file
 #    -I ... Prepend prefix for info to the input message (default)
@@ -333,7 +335,10 @@ status_text () {
     then
       rm "${CONFIG_status}" >/dev/null
     fi
-    echo_text -${pfx}SL -${CONST_level_verbose_none} "$1" >> "${CONFIG_status}"
+    if [[ -n "$1"]]
+    then
+      echo_text -${pfx}SL -${CONST_level_verbose_none} "$1" >> "${CONFIG_status}"
+    fi
   fi
 }
 
