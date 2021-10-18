@@ -88,7 +88,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.3.0"
+CONFIG_version="0.4.0"
 CONFIG_commands=('xxd') # Array of generally needed commands
 CONFIG_commands_run=('sleep') # List of commands for full running
 CONFIG_level_logging=0  # No logging
@@ -156,10 +156,6 @@ then
 	sleep ${CONFIG_icse_delay}
 fi
 echo_text -${CONST_level_verbose_info} "OK."
-if [ -n "${CONFIG_status}" ]
-then
-	echo_text -s -${CONST_level_verbose_info} "Writing to status file ... '${CONFIG_status}'."
-	echo_text -ISL -${CONST_level_verbose_none} "${msg}." > "${CONFIG_status}"
-fi
+status_text "${msg}"
 
 # End of script processed by TRAP

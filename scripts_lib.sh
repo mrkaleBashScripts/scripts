@@ -29,7 +29,7 @@ fi
 # -> BEGIN Library configs
 LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.12.2"
+LIB_version="0.13.0"
 # Process default options
 # LIB_options_exclude=('t' 'l') # List of omitted options at the very begining of script
 LIB_options=":hsVcmvo:l:f:p:t:"
@@ -233,7 +233,7 @@ echo_text () {
       ;;
     esac
   done
-  if [[ $CONFIG_level_verbose -ge $level ]]
+  if [[ ${CONFIG_level_verbose} -ge $level ]]
   then
     shift $(($OPTIND-1))
     if [[ $before -eq 1 ]]
@@ -304,28 +304,36 @@ log_text () {
 # @info:  Write text to status file
 # @opts:
 #    -a ... Append input message to the status file
+#    -I ... Prepend prefix for info to the input message (default)
+#    -W ... Prepend prefix for warning to the input message
+#    -E ... Prepend prefix for error to the input message
+#    -F ... Prepend prefix for fatal to the input message
 # @return:  none
 # @deps:  none
 status_text () {
   local OPTIND opt
   local flag_append=0
-  while getopts ":a" opt
+  local pfx="I"
+  while getopts ":aIWEF" opt
   do
     case "$opt" in
     a)
       flag_append=1
       ;;
+    I|W|E|F)
+      pfx=$opt
+      ;;
     esac
   done
-  if [ -n "$CONFIG_status" ]
+  if [ -n "${CONFIG_status}" ]
   then
     shift $(($OPTIND-1))
-    echo_text -f -${CONST_level_verbose_function} "Writing to status file '$CONFIG_status' ... $1"
+    echo_text -f -${CONST_level_verbose_function} "Writing to status file '${CONFIG_status}'${sep}$1"
     if [[ $flag_append -eq 0 && -f "${CONFIG_status}" ]]
     then
-      rm "$CONFIG_status" >/dev/null
+      rm "${CONFIG_status}" >/dev/null
     fi
-    echo_text -ISL -${CONST_level_verbose_none} "$1." >> "$CONFIG_status"
+    echo_text -${pfx}SL -${CONST_level_verbose_none} "$1" >> "${CONFIG_status}"
   fi
 }
 
@@ -410,15 +418,15 @@ check_level_loging () {
 # @return:  none
 # @deps:  none
 check_level_verbose () {
-  if [[ $CONFIG_level_verbose -lt ${CONST_level_verbose_min} ]]
+  if [[ ${CONFIG_level_verbose} -lt ${CONST_level_verbose_min} ]]
   then
     CONFIG_level_verbose=${CONST_level_verbose_min}
   fi
-  if [[ $CONFIG_level_verbose -gt ${CONST_level_verbose_max} ]]
+  if [[ ${CONFIG_level_verbose} -gt ${CONST_level_verbose_max} ]]
   then
     CONFIG_level_verbose=${CONST_level_verbose_max}
   fi
-  case "$CONFIG_level_verbose" in
+  case "${CONFIG_level_verbose}" in
   0|1|2|3|4|5)
     ;;
   *)
@@ -919,10 +927,9 @@ init_script () {
 # @return: none
 # @deps:  global CONFIG_inet variables
 write2thingsboard () {
-  local payload msg resp logpfx opt
+  local payload msg resp opt
   payload="$1"
   msg="HTTP request to ThingsBoard"
-	logpfx="I"
   opt=""
   echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)${sep}${payload}${sep}"
 	if [[ ${CONFIG_flag_dryrun} -eq 0 && -n "${payload}" ]]
@@ -947,14 +954,6 @@ write2thingsboard () {
 		resp=${CONFIG_thingsboard_code_OK}
 	fi
 	result="HTTP status code ${resp}"
-	if [ -n "${CONFIG_status}" ]
-	then
-    if [[ ${resp} -ne ${CONFIG_thingsboard_code_OK} ]]
-    then
-      logpfx="E"
-    fi
-		echo_text -${logpfx}SL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
-	fi
 	if [[ ${resp} -ne ${CONFIG_thingsboard_code_OK} ]]
 	then
 		echo_text -${CONST_level_verbose_info} "failed with ${result}. Exiting."
@@ -962,10 +961,12 @@ write2thingsboard () {
 		then
 			opt="-s"
 		fi
+    status_text -aF "${msg}${sep}${result}"
 		fatal_error ${opt} "${msg} failed with ${result}."
 	else
 		echo_text -${CONST_level_verbose_info} "${resp}."
 		log_text -IS "${msg}${sep}${result}"
+    status_text -a "${msg}${sep}${result}"
 	fi
 }
 # <- END _functions

@@ -140,7 +140,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.3.1"
+CONFIG_version="0.4.0"
 CONFIG_commands=('grep' 'ping') # Array of generally needed commands
 CONFIG_commands_run=('curl' 'xxd') # List of commands for full running
 CONFIG_flag_root=1	# Check root privileges flag
@@ -310,10 +310,7 @@ check_mains () {
 	fi
 	echo_text -${CONST_level_verbose_info} "${CONFIG_mains_status}."
 	log_text -${logpfx}S "${msg}${sep}${CONFIG_mains_status}"
-	if [ -n "${CONFIG_status}" ]
-	then
-		echo_text -${logpfx}SL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_mains_status}." >> "${CONFIG_status}"
-	fi
+	status_text -a${logpfx} "${msg}${sep}${CONFIG_mains_status}"
 }
 
 # @info:  Checking internet connection
@@ -355,18 +352,16 @@ check_inet () {
 		period=" ($((${CONFIG_log_count}-${LOG_period}+1)))"
 	fi
 	log_text -${logpfx}S "${msg}${period}${sep}${CONFIG_inet_status}"
-	if [ -n "${CONFIG_status}" ]
-	then
-		echo_text -${logpfx}SL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_inet_status}." >> "${CONFIG_status}"
-	fi
+	status_text -a${logpfx} "${msg}${sep}${CONFIG_inet_status}"
 }
 
 # @info: Toggle relay
 # @return: LOG_* variables
 # @deps: CONFIG_* variables
 relay_toggle () {
-	local msg result init control_byte
-	msg="Toggling relay '${CONFIG_icse_file}'"
+	local msg result init control_byte msgrel
+	msgrel="relay '${CONFIG_icse_file}'"
+	msg="Toggling ${msgrel}"
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)"
 	if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
 	then
@@ -393,6 +388,7 @@ relay_toggle () {
 		then
 			echo "${init}" | xxd -r -p > "${CONFIG_icse_file}"
 			sleep ${CONFIG_icse_delay}
+			status_text -aW "Initializing ${msgrel}"
 		fi
 		# Control
 		echo "${control_byte}" | xxd -r -p > "${CONFIG_icse_file}"
@@ -402,10 +398,7 @@ relay_toggle () {
 	result="${sep}to ${LOG_relay} by ${control_byte}."
 	echo_text -${CONST_level_verbose_info} "${result}"
 	log_text -IS "${msg}${result}"
-	if [ -n "${CONFIG_status}" ]
-	then
-		echo_text -ISL -${CONST_level_verbose_none} "${msg}${result}" >> "${CONFIG_status}"
-	fi
+	status_text -a "${msg}${result}"
 }
 
 # @info: Toggle relay
@@ -465,10 +458,7 @@ check_camera_front () {
 	fi
 	echo_text -${CONST_level_verbose_info} "${CONFIG_camera_front_status}."
 	log_text -${logpfx}S "${msg}${sep}${CONFIG_camera_front_status}"
-	if [ -n "${CONFIG_status}" ]
-	then
-		echo_text -${logpfx}SL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_camera_front_status}." >> "${CONFIG_status}"
-	fi
+	status_text -a${logpfx} "${msg}${sep}${CONFIG_camera_front_status}"
 }
 
 # @info:  Checking back camera wifi connection
@@ -505,10 +495,7 @@ check_camera_back () {
 	fi
 	echo_text -${CONST_level_verbose_info} "${CONFIG_camera_back_status}."
 	log_text -${logpfx}S "${msg}${sep}${CONFIG_camera_back_status}"
-	if [ -n "${CONFIG_status}" ]
-	then
-		echo_text -${logpfx}SL -${CONST_level_verbose_none} "${msg}${sep}${CONFIG_camera_back_status}." >> "${CONFIG_status}"
-	fi
+	status_text -a${logpfx} "${msg}${sep}${CONFIG_camera_back_status}"
 }
 
 # @info:  Send data to ThingsBoard IoT platform
@@ -608,10 +595,7 @@ write_thingsboard () {
 		result="no payload"
 		logpfx="E"
 		echo_text -${CONST_level_verbose_info} "${msg}${sep}${result}. Exiting."
-		if [ -n "${CONFIG_status}" ]
-		then
-			echo_text -${logpfx}SL -${CONST_level_verbose_none} "${msg}${sep}${result}." >> "${CONFIG_status}"
-		fi
+		status_text -a${logpfx} "${msg}${sep}${result}"
 		fatal_error "${msg} failed with ${result}."
 	fi
 	write2thingsboard "${reqdata}"
@@ -698,11 +682,8 @@ then
 	source "${CONFIG_log_file}"
 fi
 
-if [ -n "${CONFIG_status}" ]
-then
-	echo_text -h -${CONST_level_verbose_info} "Writing to status file${sep}'${CONFIG_status}'."
-	echo "" > "${CONFIG_status}"
-fi
+# Initialize status file
+status_text
 
 check_mains
 # Do not check internet and control relay when there is no power supply
