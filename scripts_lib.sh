@@ -337,7 +337,7 @@ status_text () {
     then
       rm "${CONFIG_status}" >/dev/null
     fi
-    if [ -n "${msg}"]
+    if [ -n "${msg}" ]
     then
       echo_text -${pfx}SL -${CONST_level_verbose_none} "${msg}" >> "${CONFIG_status}"
     fi
