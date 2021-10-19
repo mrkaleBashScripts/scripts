@@ -140,7 +140,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.4.0"
+CONFIG_version="0.4.1"
 CONFIG_commands=('grep' 'ping') # Array of generally needed commands
 CONFIG_commands_run=('curl' 'xxd') # List of commands for full running
 CONFIG_flag_root=1	# Check root privileges flag
@@ -359,9 +359,10 @@ check_inet () {
 # @return: LOG_* variables
 # @deps: CONFIG_* variables
 relay_toggle () {
-	local msg result init control_byte msgrel
+	local msg result init control_byte msgrel msgini
 	msgrel="relay '${CONFIG_icse_file}'"
 	msg="Toggling ${msgrel}"
+	msgini="Initializing ${msgrel}"
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)"
 	if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
 	then
@@ -388,7 +389,8 @@ relay_toggle () {
 		then
 			echo "${init}" | xxd -r -p > "${CONFIG_icse_file}"
 			sleep ${CONFIG_icse_delay}
-			status_text -aW "Initializing ${msgrel}"
+			log_text -WS "${msgini}"
+			status_text -aW "${msgini}"
 		fi
 		# Control
 		echo "${control_byte}" | xxd -r -p > "${CONFIG_icse_file}"
