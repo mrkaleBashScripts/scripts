@@ -140,7 +140,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.4.1"
+CONFIG_version="0.5.0"
 CONFIG_commands=('grep' 'ping') # Array of generally needed commands
 CONFIG_commands_run=('curl' 'xxd') # List of commands for full running
 CONFIG_flag_root=1	# Check root privileges flag
@@ -352,7 +352,7 @@ check_inet () {
 		period=" ($((${CONFIG_log_count}-${LOG_period}+1)))"
 	fi
 	log_text -${logpfx}S "${msg}${period}${sep}${CONFIG_inet_status}"
-	status_text -a${logpfx} "${msg}${sep}${CONFIG_inet_status}"
+	status_text -a${logpfx} "${msg}${period}${sep}${CONFIG_inet_status}"
 }
 
 # @info: Toggle relay
@@ -399,8 +399,8 @@ relay_toggle () {
 	LOG_toggle=1
 	result="${sep}to ${LOG_relay} by ${control_byte}."
 	echo_text -${CONST_level_verbose_info} "${result}"
-	log_text -IS "${msg}${result}"
-	status_text -a "${msg}${result}"
+	log_text -WS "${msg}${result}"
+	status_text -aW "${msg}${result}"
 }
 
 # @info: Toggle relay
@@ -537,10 +537,7 @@ write_thingsboard () {
 		fi
 		# Compose data item for relay toggling
 		item=""
-		if [[ "${CONFIG_inet_status}" == "${CONFIG_active}" &&  -f "${CONFIG_log_file}" ]]
-		then
-			item="true"
-		elif [[ ${LOG_toggle} -eq 1 ]]
+		if [[ ${LOG_toggle} -eq 1 ]]
 		then
 			if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
 			then
@@ -550,6 +547,10 @@ write_thingsboard () {
 				item="false"
 			fi
 			LOG_toggle=0
+		# Relay turned on outside the script
+		elif [[ "${CONFIG_inet_status}" == "${CONFIG_active}" && "${LOG_relay}" == "${CONFIG_idle}" ]]
+		then
+				item="true"
 		fi
 		if [ -n "${item}" ]
 		then
