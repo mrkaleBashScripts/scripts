@@ -29,7 +29,7 @@ fi
 # -> BEGIN Library configs
 LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.13.0"
+LIB_version="0.13.1"
 # Process default options
 # LIB_options_exclude=('t' 'l') # List of omitted options at the very begining of script
 LIB_options=":hsVcmvo:l:f:p:t:"
@@ -504,7 +504,7 @@ check_commands () {
     cmd_list+=" ${CONFIG_commands_run[@]}"
   fi
   # Detect not available commands
-  for command in $cmd_list
+  for command in ${cmd_list}
   do
     if ( ! command -v ${command} >/dev/null )
     then
@@ -942,7 +942,7 @@ write2thingsboard () {
 	if [[ ${CONFIG_flag_dryrun} -eq 0 && -n "${payload}" ]]
 	then
 		# Compose and send HTTP request
-		for (( i=0; i<${CONFIG_thingsboard_fail_count}; i++))
+		for (( i=0; i<${CONFIG_thingsboard_fail_count}; i++ ))
 		do
 			resp=$(curl --location --silent \
 --write-out %{http_code} \

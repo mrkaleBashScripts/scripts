@@ -140,7 +140,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.5.0"
+CONFIG_version="0.6.0"
 CONFIG_commands=('grep' 'ping') # Array of generally needed commands
 CONFIG_commands_run=('curl' 'xxd') # List of commands for full running
 CONFIG_flag_root=1	# Check root privileges flag
@@ -157,8 +157,8 @@ CONFIG_mains_status=""
 CONFIG_inet_status=""
 CONFIG_camera_front_status=""
 CONFIG_camera_back_status=""
-CONFIG_inet_ip="8.8.4.4"	# External test IP address of Google, inc.
-CONFIG_icse_file=""	# Device file of the relay board
+CONFIG_inet_ips=('8.8.4.4' '1.0.0.1' '208.67.220.220')	# External test IPs: Google, Cloudflare, OpenDNS.
+CONFIG_icse_file="/dev/null"	# Device file of the relay board
 CONFIG_icse_delay=1	# Delay in seconds between control bytes sending
 CONFIG_camera_front_ip=""
 CONFIG_camera_back_ip=""
@@ -320,30 +320,29 @@ check_mains () {
 check_inet () {
 	local msg period
 	msg="Checking internet connection status"
-	logpfx="I"
+	logpfx="E"
 	CONFIG_inet_status=${CONFIG_idle}
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(force_token)${sep}"
 	# Dry run simulation
 	if [[ ${CONFIG_flag_force_inet} -eq 1 ]]
 	then
 		CONFIG_inet_status=${CONFIG_active}
+		logpfx="I"
 	elif [[ ${CONFIG_flag_force_noinet} -eq 1 ]]
 	then
-		CONFIG_inet_status=${CONFIG_idle}
-		logpfx="E"
+		:
 	# Check connection to internet
 	else
-		if [ -n "${CONFIG_inet_ip}" ]
-		then
-			ping -c1 -w5 ${CONFIG_inet_ip} >/dev/null
+		for ip in ${CONFIG_inet_ips[@]}
+		do
+			ping -c1 -w5 ${ip} >/dev/null
 			if [ $? -eq 0 ]
 			then
 				CONFIG_inet_status=${CONFIG_active}
-			else
-				CONFIG_inet_status=${CONFIG_idle}
-				logpfx="E"
+				logpfx="I"
+				break
 			fi
-		fi
+		done
 	fi
 	echo_text -${CONST_level_verbose_info} "${CONFIG_inet_status}."
 	period=""
