@@ -140,7 +140,7 @@ fi
 
 # -> BEGIN _config
 CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.6.0"
+CONFIG_version="0.7.0"
 CONFIG_commands=('grep' 'ping') # Array of generally needed commands
 CONFIG_commands_run=('curl' 'xxd') # List of commands for full running
 CONFIG_flag_root=1	# Check root privileges flag
@@ -366,12 +366,13 @@ relay_toggle () {
 	if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
 	then
 		# Initialize relay for sure (even if done at boot or USB plug-in)
-		init="50 50 50 50 51 52 00 00"
+		init="50 50 50 50 51 52 00 03"
 		# Control both relays on the board at once
 		control_byte="03"
 		LOG_relay=${CONFIG_idle}
 	else
-		init=""
+		# Initialize relay for sure (even if done at boot or USB plug-in)
+		init="50 50 50 50 51 52 00 00"
 		control_byte="00"
 		LOG_relay=${CONFIG_active}
 	fi
@@ -384,15 +385,16 @@ relay_toggle () {
 		msg="${msg}$(force_token) intact"
 	else
 		# Initialize
-		if [ -n "${init}" ]
-		then
-			echo "${init}" | xxd -r -p > "${CONFIG_icse_file}"
-			sleep ${CONFIG_icse_delay}
-			log_text -WS "${msgini}"
-			status_text -aW "${msgini}"
-		fi
+		# if [ -n "${init}" ]
+		# then
+		# 	echo "${init}" | xxd -r -p > "${CONFIG_icse_file}"
+		# 	sleep ${CONFIG_icse_delay}
+		# 	log_text -WS "${msgini}"
+		# 	status_text -aW "${msgini}"
+		# fi
 		# Control
-		echo "${control_byte}" | xxd -r -p > "${CONFIG_icse_file}"
+		# echo "${control_byte}" | xxd -r -p > "${CONFIG_icse_file}"
+		echo "${init}" | xxd -r -p > "${CONFIG_icse_file}"
 	fi
 	LOG_period=${CONFIG_log_count}
 	LOG_toggle=1
