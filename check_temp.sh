@@ -96,8 +96,8 @@ then
 fi
 
 # -> BEGIN _config
-CONFIG_copyright="(c) 2014-2017 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.7.0"
+CONFIG_copyright="(c) 2014-2022 Libor Gabaj <libor.gabaj@gmail.com>"
+CONFIG_version="0.8.0"
 #
 CONFIG_warning_perc=80                    # Percentage of maximal limit for warning - should be integer
 CONFIG_shutdown_perc=95                   # Percentage of maximal limit for shutting down - should be integer
@@ -106,6 +106,8 @@ CONFIG_flag_force_warning=0               # Force warning temperature flag
 CONFIG_flag_force_shutdown=0              # Force shutdown temperature flag
 CONFIG_flag_force_maximum=0               # Force maximal temperature flag
 CONFIG_log_file="$0.err"                  # Error log file
+CONFIG_status="/tmp/${CONFIG_script}.inf" # Default status file
+
 #
 LOG_temp_warning=0                        # Recent logged warning temperature in millicentigrades
 # <- END _config
