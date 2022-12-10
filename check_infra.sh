@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+ #!/usr/bin/env bash
 #
 # NAME:
 #   check_infra.sh - Check status of infrastructure
@@ -14,16 +14,15 @@
 # - The script checks if supplying of the local server is from electrical mains
 #   or battery.
 # - The scripts checks if local server has connection to the internet, i.e.,
-#   the router is functional and can pings to selected external IP addresss.
+#   the router is functional and can pings to selected external IP addresses.
 # - The script controls the USB relay board ICSE013A with 2 relays both at once.
 # - One of relays supplies the internet router and works in opposite order, i.e.,
 #   Normally Closed ports are utilized and relay supplies in OFF state.
 # - At detection internet outage, the script starts countdown and executes itself
 #   3 times. If there is still outage, the script turns the relay ON, which means
 #   switching OFF the router. Right before it the script initializes the relay
-#   board for sure, even if it is initialized at system boot or USB cable plug-in.
-#   In this state the script starts new countdown and executes itself 3 times
-#   as a waiting period for discharching the router.
+#   board. In this state the script starts new countdown and executes itself 3 times
+#   as a waiting period for discharging the router.
 # - Then the script turns the relay OFF again, which connects mains to the router
 #   and starts the entire process again. If the internet connection is restored
 #   during that process, the script waits to another internet outage for rebooting
@@ -74,10 +73,6 @@
 #
 #   -f  ConfigFile
 #       Configuration file for overriding default configuration parameters.
-#
-#   -p  CredFile
-#       Credentials file with access permissions for overriding default
-#       configuration parameters.
 #
 #   -t  StatusFile
 #       Tick file for writing working status of the script.
@@ -139,8 +134,8 @@ then
 fi
 
 # -> BEGIN _config
-CONFIG_copyright="(c) 2021 Libor Gabaj <libor.gabaj@gmail.com>"
-CONFIG_version="0.7.0"
+CONFIG_copyright="(c) 2021-2022 Libor Gabaj <libor.gabaj@gmail.com>"
+CONFIG_version="0.8.0"
 CONFIG_commands=('grep' 'ping') # Array of generally needed commands
 CONFIG_commands_run=('curl' 'xxd') # List of commands for full running
 CONFIG_flag_root=1	# Check root privileges flag
@@ -159,7 +154,6 @@ CONFIG_camera_front_status=""
 CONFIG_camera_back_status=""
 CONFIG_inet_ips=('8.8.4.4' '1.0.0.1' '208.67.220.220')	# External test IPs: Google, Cloudflare, OpenDNS.
 CONFIG_icse_file="/dev/null"	# Device file of the relay board
-CONFIG_icse_delay=1	# Delay in seconds between control bytes sending
 CONFIG_camera_front_ip=""
 CONFIG_camera_back_ip=""
 CONFIG_log_file="/tmp/${CONFIG_script}.dat"	# Persistent log file
@@ -363,17 +357,17 @@ relay_toggle () {
 	msg="Toggling ${msgrel}"
 	msgini="Initializing ${msgrel}"
 	echo_text -hp -${CONST_level_verbose_info} "${msg}$(dryrun_token)"
+	relay_init="50 50 50 50 51 52 00 "
 	if [[ "${LOG_relay}" == "${CONFIG_active}" ]]
 	then
 		# Initialize relay for sure (even if done at boot or USB plug-in)
 		init="50 50 50 50 51 52 00 03"
-		# Control both relays on the board at once
-		control_byte="03"
+		# Turn ON both relays on the board at once
+		relay_control="03"
 		LOG_relay=${CONFIG_idle}
 	else
-		# Initialize relay for sure (even if done at boot or USB plug-in)
-		init="50 50 50 50 51 52 00 00"
-		control_byte="00"
+		# Turn OFF all relays on the board
+		relay_control="00"
 		LOG_relay=${CONFIG_active}
 	fi
 	if [[ $CONFIG_flag_dryrun -ne 0 ]]
@@ -383,18 +377,9 @@ relay_toggle () {
 	elif [[ ${CONFIG_flag_force_norelay} -ne 0 ]]
 	then
 		msg="${msg}$(force_token) intact"
+	# Control relay
 	else
-		# Initialize
-		# if [ -n "${init}" ]
-		# then
-		# 	echo "${init}" | xxd -r -p > "${CONFIG_icse_file}"
-		# 	sleep ${CONFIG_icse_delay}
-		# 	log_text -WS "${msgini}"
-		# 	status_text -aW "${msgini}"
-		# fi
-		# Control
-		# echo "${control_byte}" | xxd -r -p > "${CONFIG_icse_file}"
-		echo "${init}" | xxd -r -p > "${CONFIG_icse_file}"
+		echo "${relay_init}${relay_control}" | xxd -r -p > "${CONFIG_icse_file}"
 	fi
 	LOG_period=${CONFIG_log_count}
 	LOG_toggle=1
@@ -404,7 +389,7 @@ relay_toggle () {
 	status_text -aW "${msg}${result}"
 }
 
-# @info: Toggle relay
+# @info: Control relay
 # @return: LOG_* variables
 # @deps: CONFIG_* variables
 relay_control () {

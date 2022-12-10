@@ -29,10 +29,10 @@ fi
 # -> BEGIN Library configs
 LIB_copyright="(c) 2014-2021 Libor Gabaj <libor.gabaj@gmail.com>"
 LIB_script=$(basename $0)
-LIB_version="0.13.1"
+LIB_version="0.13.2"
 # Process default options
 # LIB_options_exclude=('t' 'l') # List of omitted options at the very begining of script
-LIB_options=":hsVcmvo:l:f:p:t:"
+LIB_options=":hsVcmvo:l:f:t:"
 for opt in ${LIB_options_exclude[@]}
 do
   LIB_options=${LIB_options//$opt:}
@@ -848,11 +848,6 @@ Options and arguments:
       then
         help+="
   -f config_file: configuration file to be used"
-      fi
-      if [[ $LIB_options == *p* ]]
-      then
-        help+="
-  -p permission_file: credentials file to be used"
       fi
       if [[ $LIB_options == *t* ]]
       then
